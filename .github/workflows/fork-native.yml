@@ -1,0 +1,144 @@
+name: Fork native regressions
+
+on:
+  push:
+    branches:
+      - fix/wasm-known-rejection
+      - fix/read-file-sync-url
+      - fix/fs-promises-rm-options
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fork-native-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    if: >-
+      github.repository == 'jlucaso1/scriptc' &&
+      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      contains(fromJSON('["fix/wasm-known-rejection","fix/read-file-sync-url","fix/fs-promises-rm-options"]'), github.head_ref || github.ref_name)
+    name: Native regression (${{ matrix.flavor }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        flavor: [plain, san]
+    env:
+      FEATURE_BRANCH: ${{ github.head_ref || github.ref_name }}
+      SCRIPTC_TEST_WORKERS: "2"
+      SCRIPTC_SAN: ${{ matrix.flavor == 'san' && '1' || '' }}
+      ASAN_OPTIONS: detect_leaks=0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/llvm-linux
+      - uses: ./.github/actions/zig
+      - uses: ./.github/actions/native-packages
+        with:
+          target: linux-x64-gnu
+      - run: pnpm -r build
+      - run: pnpm lint
+      - run: pnpm format:check
+      - run: pnpm node-compat:check
+      - run: pnpm test:ts7 --baselines-only
+      - name: CI policy tests
+        run: pnpm exec vitest run tests/harness/ci-stack-scope.test.ts tests/harness/fork-ci.test.ts
+      - name: Native regression tests
+        shell: bash
+        run: |
+          ulimit -c 0
+          case "$FEATURE_BRANCH" in
+            fix/wasm-known-rejection)
+              pnpm exec vitest run packages/compiler/src/backend/llvm/wasm-modules.test.ts packages/compiler/src/ir/function-references.test.ts packages/compiler/src/wasm/binary.test.ts packages/compiler/src/wasm/discover.test.ts packages/compiler/src/wasm/translate.test.ts tests/harness/wasm-rejection.test.ts
+              pnpm exec vitest run tests/harness/llvm-differential.test.ts -t 'webassembly-(api\.mjs|jsapi\.mjs|typed\.ts|type-mentions\.ts|feature-probe\.js)$'
+              ;;
+            fix/read-file-sync-url)
+              pnpm exec vitest run packages/compiler/test/fs-read-file-url.test.ts
+              pnpm exec vitest run tests/harness/differential.test.ts tests/harness/llvm-differential.test.ts -t 'read-file-sync-url'
+              ;;
+            fix/fs-promises-rm-options)
+              pnpm exec vitest run packages/compiler/test/fs-promises-rm-options.test.ts packages/compiler/src/backend/executable-features.test.ts packages/compiler/src/ir/runtime-features.test.ts packages/compiler/src/backend/runtime-pack.test.ts packages/runtime-pack-common/test/library-matrix.test.ts
+              pnpm exec vitest run tests/harness/differential.test.ts tests/harness/llvm-differential.test.ts -t 'fs-promises-rm-options|1630-rmsync-retry-options'
+              if [ "$SCRIPTC_SAN" != 1 ]; then
+                pnpm exec vitest run tests/harness/fs-promises-rm-retry.test.ts
+              fi
+              ;;
+            *) echo "Unexpected branch: $FEATURE_BRANCH" >&2; exit 1 ;;
+          esac
+  wasm_windows:
+    if: >-
+      github.repository == 'jlucaso1/scriptc' &&
+      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.head_ref || github.ref_name) == 'fix/wasm-known-rejection'
+    name: test (Windows COFF WASM rejection reasons)
+    # The official LLVM 22 Windows archives are MSVC-built and the helper
+    # selects CMake's VS 2022 generator. `windows-latest` can move to an
+    # image without that generator, so retain the hosted VS 2022 contract.
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      SCRIPTC_TEST_WORKERS: "2"
+      SCRIPTC_SAN: "0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Install pinned LLVM development distribution
+        shell: pwsh
+        run: |
+          # windows-2022 already provides CMake, Ninja, VS 2022, and 7-Zip.
+          # Use the complete archive because it supplies LLVM's exported CMake
+          # targets and static libraries. Windows tar.exe takes 25+ minutes to
+          # materialize it; two-stage 7-Zip extraction takes seconds.
+          $archive = "$env:RUNNER_TEMP\clang+llvm-22.1.8-x86_64-pc-windows-msvc.tar.xz"
+          $llvm = "$env:RUNNER_TEMP\llvm-22.1.8"
+          $expanded = "$env:RUNNER_TEMP\llvm-expanded"
+          $sevenZip = "$env:ProgramFiles\7-Zip\7z.exe"
+          if (-not (Test-Path $sevenZip)) {
+            throw "The windows-2022 runner must provide 7-Zip"
+          }
+          curl.exe -fL --retry 3 -o $archive https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/clang%2Bllvm-22.1.8-x86_64-pc-windows-msvc.tar.xz
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $sevenZip x -y "-o$expanded" $archive
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $sevenZip x -y "-o$expanded" "$expanded\clang+llvm-22.1.8-x86_64-pc-windows-msvc.tar"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Move-Item "$expanded\clang+llvm-22.1.8-x86_64-pc-windows-msvc" $llvm
+          echo "LLVM_DIR=$llvm\lib\cmake\llvm" >> $env:GITHUB_ENV
+          echo "$llvm\bin" >> $env:GITHUB_PATH
+      - run: pnpm install --frozen-lockfile
+      - name: Build Windows helper
+        run: pnpm --filter @scriptc/llvm-win32-x64-msvc build:native
+      - uses: ./.github/actions/zig
+      - name: Build Windows runtime pack
+        run: pnpm --filter @scriptc/runtime-win32-x64-msvc build:native
+      - name: Verify rebuilt runtime pack
+        run: node packages/runtime-win32-x64-msvc/scripts/verify.mjs
+      - run: pnpm -r build
+      - name: Execute Windows WASM rejection regressions (release and dev)
+        run: pnpm exec vitest run tests/harness/wasm-rejection.test.ts --reporter=verbose
