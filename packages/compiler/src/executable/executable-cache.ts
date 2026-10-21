@@ -70,6 +70,8 @@ export interface EarlyExecutableNativeFeatures {
   eventsOnceSignal?: boolean;
   dynBufferNum?: boolean;
   builtinValues?: boolean;
+  /** Option-aware fs.promises.rm wrappers, absent when unused. */
+  fsRmOptions?: boolean;
   events: boolean;
   emitter: boolean;
   symbol: boolean;

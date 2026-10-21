@@ -863,7 +863,7 @@ export function lowerFsPromisesMkdirCall(
     : { kind: "libCall", fn: "fsp.mkdirRecursive", args: [path], type, loc };
 }
 
-// rmSync(p, options): literal { recursive?, force? } booleans — the
+// rmSync(p, options) and fs.promises.rm(p, options): literal { recursive?, force? } booleans — the
 // cleanup shape rmSync(dir, { recursive: true, force: true }) —
 // plus the maxRetries/retryDelay numbers (the tmpdir-harness shape
 // rmSync(p, { maxRetries: 3, recursive: true, force: true })): those
@@ -871,7 +871,13 @@ export function lowerFsPromisesMkdirCall(
 // runtime implements Node's linear-backoff retry on
 // EBUSY/EMFILE/ENFILE/ENOTEMPTY/EPERM. The retry-free shape keeps the
 // historical rmOptsSync lowering unchanged.
-export function lowerFsRemoveCall(lowerer: Lowerer, expr: ts.CallExpression, loc: SrcLoc): IrExpr {
+export function lowerFsRemoveCall(
+  lowerer: Lowerer,
+  expr: ts.CallExpression,
+  loc: SrcLoc,
+  promise = false,
+): IrExpr {
+  const type: IrType = promise ? { kind: "promise", inner: VOID } : VOID;
   const opts = literalBoolOptions(
     expr.arguments.nodes[1]!,
     ["recursive", "force"],
@@ -879,7 +885,7 @@ export function lowerFsRemoveCall(lowerer: Lowerer, expr: ts.CallExpression, loc
   );
   if (opts === null) {
     lowerer.noLowering(
-      "rmSync with an options argument beyond { recursive, force, maxRetries, retryDelay }",
+      `${promise ? "rm" : "rmSync"} with an options argument beyond { recursive, force, maxRetries, retryDelay }`,
       expr.arguments.nodes[1]!,
       "the recursive/force flags must be boolean literals; maxRetries/retryDelay are numbers; other options have no lowering",
     );
@@ -891,11 +897,48 @@ export function lowerFsRemoveCall(lowerer: Lowerer, expr: ts.CallExpression, loc
   if (opts.exprs["maxRetries"] === undefined && opts.exprs["retryDelay"] === undefined) {
     return {
       kind: "libCall",
-      fn: "fs.rmOptsSync",
+      fn: promise ? "fsp.rmOpts" : "fs.rmOptsSync",
       args: [path, recursive, force],
-      type: VOID,
+      type,
       loc,
     };
+  }
+  if (promise) {
+    const pathLocal = lowerer.declareHiddenLocal("%rmPath", STRING);
+    const stmts: IrStmt[] = [{ kind: "varDecl", localId: pathLocal.id, init: path, loc }];
+    const values: Record<string, IrExpr> = {};
+    // Evaluate numeric option values in source order before calling the runtime.
+    for (const property of (expr.arguments.nodes[1] as ts.ObjectLiteralExpression).properties
+      .nodes) {
+      if (
+        !ts.isPropertyAssignment(property) ||
+        !ts.isIdentifier(property.name) ||
+        !["maxRetries", "retryDelay"].includes(property.name.text)
+      )
+        continue;
+      const local = lowerer.declareHiddenLocal("%rmOption", F64);
+      stmts.push({
+        kind: "varDecl",
+        localId: local.id,
+        init: lowerer.lowerExprExpecting(property.initializer, F64),
+        loc,
+      });
+      values[property.name.text] = varRef(local.id, F64, loc);
+    }
+    const result: IrExpr = {
+      kind: "libCall",
+      fn: "fsp.rmRetry",
+      args: [
+        varRef(pathLocal.id, STRING, loc),
+        recursive,
+        force,
+        values["maxRetries"] ?? { kind: "numLit", value: 0, type: F64, loc },
+        values["retryDelay"] ?? { kind: "numLit", value: 100, type: F64, loc },
+      ],
+      type,
+      loc,
+    };
+    return { kind: "seqExpr", stmts, result, type, loc };
   }
   // Node's defaults: maxRetries 0, retryDelay 100 (only reached when
   // at least one of the pair is spelled — the plain form above owns
@@ -912,7 +955,7 @@ export function lowerFsRemoveCall(lowerer: Lowerer, expr: ts.CallExpression, loc
       num(opts.exprs["maxRetries"], 0),
       num(opts.exprs["retryDelay"], 100),
     ],
-    type: VOID,
+    type,
     loc,
   };
 }

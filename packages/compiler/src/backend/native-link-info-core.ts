@@ -55,6 +55,8 @@ export interface NativeLinkFeatures {
   /** Builtin functions read as values (Buffer.byteLength, Buffer.alloc,
    * fs.realpathSync) link scr_builtin_values.c; absent (false) otherwise. */
   builtinValues?: boolean;
+  /** Option-aware fs.promises.rm wrappers, absent when unused. */
+  fsRmOptions?: boolean;
   events: boolean;
   emitter: boolean;
   symbol: boolean;

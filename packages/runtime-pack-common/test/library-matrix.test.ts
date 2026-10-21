@@ -117,3 +117,18 @@ test("Wasm packs include reactor runtimes without thread-local state or a JS eng
     expect(sources).not.toContain("scr_async.c");
   }
 });
+
+test("option-aware promise removal has a separate optional executable unit", () => {
+  const unit = matrix.runtime_units.find((entry) => entry.source === "scr_fs_rm.c");
+  expect(unit?.predicate).toBe("fsRmOptions");
+  for (const mode of [
+    "library-release",
+    "library-thread-release",
+    "library-dev",
+    "library-thread-dev",
+  ]) {
+    expect(matrix.flavors[mode].runtime_units.some((entry) => entry.source === "scr_fs_rm.c")).toBe(
+      false,
+    );
+  }
+});

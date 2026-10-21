@@ -2094,6 +2094,7 @@ export const BUILTIN_MODULE_FN_ALIASES: Record<
     watch: ["fs.watchCb"],
   },
   "fs/promises": {
+    rm: ["fsp.rmOpts", "fsp.rmRetry"],
     // The Buffer form (no encoding) and the runtime-encoding forms.
     readFile: ["fsp.readFileBytes", "fsp.readFileEncoded"],
     readlink: ["fsp.readlinkStr", "fsp.readlinkBuffer"],

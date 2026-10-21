@@ -54,6 +54,7 @@ export const BASE_RUNTIME_SOURCES = [
 export const OPTIONAL_RUNTIME_SOURCES = [
   ["scr_copying.c", "copying"],
   ["scr_file_handle.c", "fileHandle"],
+  ["scr_fs_rm.c", "fsRmOptions"],
   ["scr_regex.c", "regex"],
   ["scr_glob.c", "regex"],
   ["scr_idna.c", "regex"],

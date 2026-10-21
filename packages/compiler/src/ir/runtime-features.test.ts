@@ -17,6 +17,16 @@ describe("runtime feature snapshots", () => {
     expr: { kind: "libCall" as const, fn, args: [], type: VOID, loc },
   });
 
+  test("links option-aware rm wrappers only for their overloads", () => {
+    const mod = module();
+    mod.functions[0]!.body.push(call("fsp.rm"));
+    expect(moduleRuntimeFeatures(mod).fsRmOptions).toBe(false);
+    for (const fn of ["fsp.rmOpts", "fsp.rmRetry"] as const) {
+      mod.functions[0]!.body = [call(fn)];
+      expect(moduleRuntimeFeatures(mod).fsRmOptions).toBe(true);
+    }
+  });
+
   test("updates link requirements after an IR edit without changing earlier snapshots", () => {
     const mod = module();
     const first = moduleRuntimeFeatures(mod);

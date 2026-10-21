@@ -43724,6 +43724,7 @@
           "tests/corpus/6207-fs-constants-object.ts",
           "tests/corpus/6208-fs-constants-require.cjs",
           "tests/corpus/fs-native-realpath.ts",
+          "tests/corpus/fs-promises-rm-options.ts",
           "tests/corpus/node24-fs-links-callbacks.cjs",
           "tests/corpus/node24-fs-links-errors.cjs",
           "tests/corpus/node24-fs-links-options.cjs",
@@ -45263,10 +45264,7 @@
         "status": "partial",
         "evidence": "surface-manifest:node-builtin.fs.promises.rm",
         "tests": [
-          "tests/corpus/1403-buffer-fs.ts",
-          "tests/corpus/2595-fs-arg-ladders.cjs",
-          "tests/corpus/2919-fs-function-values.ts",
-          "tests/corpus/2920-fs-promises-function-values.ts"
+          "tests/corpus/fs-promises-rm-options.ts"
         ]
       },
       "anchorSource": "exact"

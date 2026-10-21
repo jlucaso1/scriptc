@@ -719,6 +719,7 @@ const RUNTIME_FEATURE_RULES = {
   eventsOnceSignal: rule({ fns: ["events.onceSignal"] }),
   fetch: rule({ prefixes: ["fetch."] }),
   fileHandle: rule({ types: ["fileHandle"] }),
+  fsRmOptions: rule({ fns: ["fsp.rmOpts", "fsp.rmRetry"] }),
   fsWatch: rule({ prefixes: ["fs.watch", "watcher."], types: ["fsWatcher"] }),
   /** A socket 'lookup' listener: the C main installs the net unit's
    * lookup records (scr_net_lookup_install). */
@@ -870,6 +871,7 @@ function noRuntimeFeatures(): RuntimeFeatures {
     eventsOnceSignal: false,
     fetch: false,
     fileHandle: false,
+    fsRmOptions: false,
     fsWatch: false,
     http2: false,
     http: false,

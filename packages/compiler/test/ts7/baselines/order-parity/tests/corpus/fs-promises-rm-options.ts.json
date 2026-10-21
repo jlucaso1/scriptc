@@ -1,0 +1,6 @@
+{
+ "order": [
+  "<repo>/tests/corpus/fs-promises-rm-options.ts"
+ ],
+ "diags": []
+}

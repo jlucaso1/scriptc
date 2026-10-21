@@ -69,6 +69,7 @@
     "node-builtin.fs.promises.appendFile": ["tests/corpus/5542-fs-promises-parity.cjs", "tests/corpus/5543-fs-promises-typed.ts"],
     "node-builtin.fs.promises.copyFile": ["tests/corpus/5542-fs-promises-parity.cjs", "tests/corpus/5543-fs-promises-typed.ts"],
     "node-builtin.fs.promises.mkdtemp": ["tests/corpus/5542-fs-promises-parity.cjs", "tests/corpus/5543-fs-promises-typed.ts"],
+    "node-builtin.fs.promises.rm": ["tests/corpus/fs-promises-rm-options.ts"],
     "node-builtin.fs.promises.rmdir": ["tests/corpus/5542-fs-promises-parity.cjs", "tests/corpus/5543-fs-promises-typed.ts"],
     "node-builtin.fs.promises.truncate": ["tests/corpus/5542-fs-promises-parity.cjs", "tests/corpus/5543-fs-promises-typed.ts"],
     "node-builtin.fs.promises.chown": ["tests/corpus/5542-fs-promises-parity.cjs", "tests/corpus/5543-fs-promises-typed.ts"],

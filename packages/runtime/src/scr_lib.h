@@ -493,6 +493,8 @@ ScrPromise *scr_fsp_utimes(const ScrDyn *path, const ScrDyn *atime, const ScrDyn
 ScrPromise *scr_fsp_lutimes(const ScrDyn *path, const ScrDyn *atime, const ScrDyn *mtime);
 ScrPromise *scr_fsp_readdir(ScrStr *path);
 ScrPromise *scr_fsp_rm(ScrStr *path);
+ScrPromise *scr_fsp_rm_opts(ScrStr *path, bool recursive, bool force);
+ScrPromise *scr_fsp_rm_opts_retry(ScrStr *path, bool recursive, bool force, double max_retries, double retry_delay);
 ScrPromise *scr_fsp_stat(ScrStr *path);
 ScrPromise *scr_fsp_realpath(ScrStr *path);
 ScrPromise *scr_fsp_lstat(ScrStr *path);

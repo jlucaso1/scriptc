@@ -3128,6 +3128,11 @@ export const LIB_FN_SIGS = defineLibFnSignatures({
    * scandir failure becomes its rejection. */
   "fsp.readdirTypes": { argTypes: [STRING], result: { kind: "promise", inner: VOID } },
   "fsp.rm": { argTypes: [STRING], result: { kind: "promise", inner: VOID } },
+  "fsp.rmOpts": { argTypes: [STRING, BOOL, BOOL], result: { kind: "promise", inner: VOID } },
+  "fsp.rmRetry": {
+    argTypes: [STRING, BOOL, BOOL, F64, F64],
+    result: { kind: "promise", inner: VOID },
+  },
   "fsp.stat": { argTypes: [STRING], result: { kind: "promise", inner: STATS_T } },
   "fsp.realpath": { argTypes: [STRING], result: { kind: "promise", inner: STRING } },
   "fsp.lstat": { argTypes: [STRING], result: { kind: "promise", inner: STATS_T } },
