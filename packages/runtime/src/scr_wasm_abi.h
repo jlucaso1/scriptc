@@ -174,6 +174,20 @@ typedef struct {
 } ScrWasmRegistry;
 extern const ScrWasmRegistry scr_wasm_registry;
 
+/* Discovered bytes that cannot be translated are never executable modules.
+ * New program objects emit this registry; older ones use the weak empty
+ * runtime default without changing the translated-module ABI. */
+typedef struct {
+  uint8_t sha256[32];
+  uint64_t byte_length;
+  const char *reason;
+} ScrWasmRejection;
+typedef struct {
+  uint64_t count;
+  const ScrWasmRejection *modules;
+} ScrWasmRejections;
+extern const ScrWasmRejections scr_wasm_rejections;
+
 /* Runtime objects the translated code reads at fixed offsets. */
 typedef struct ScrWasmMemory {
   uint8_t *base;      /* 0 */

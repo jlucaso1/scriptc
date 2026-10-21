@@ -1208,16 +1208,25 @@ export function lowerToIr(
       ...(onModule === undefined ? {} : { onModule }),
     });
   // A program that uses the WebAssembly API carries every module the build
-  // can see and translate (wasm/translate.ts); the rest fail at run time
-  // with the CompileError for untranslated bytes.
+  // can see, including the reason a module could not be translated.
   if (result.module !== null && resultLowerer.usesWebAssembly) {
     const bytesByHash = new Map<string, Uint8Array>();
     const reports = discoverModules((sha256, bytes) => bytesByHash.set(sha256, bytes));
     const wasmModules: IrWasmModule[] = [];
     for (const report of reports) {
       const bytes = bytesByHash.get(report.sha256);
-      if (report.status !== "valid" || bytes === undefined) continue;
-      wasmModules.push({ sha256: report.sha256, bytes: encodeBase64(bytes) });
+      if (bytes === undefined) continue;
+      const rejectionReason =
+        report.status === "unsupported"
+          ? `unsupported features: ${report.unsupported.join(", ")}`
+          : report.status !== "valid"
+            ? `${report.status} module: ${report.error ?? "validation failed"}`
+            : undefined;
+      wasmModules.push({
+        sha256: report.sha256,
+        bytes: encodeBase64(bytes),
+        ...(rejectionReason === undefined ? {} : { rejectionReason }),
+      });
     }
     result.module.wasmModules = wasmModules;
     if (resultLowerer.usesWasmCustomSections) result.module.wasmCustomSections = true;
