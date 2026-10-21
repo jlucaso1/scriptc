@@ -139,6 +139,6 @@ jobs:
         run: pnpm --filter @scriptc/runtime-win32-x64-msvc build:native
       - name: Verify rebuilt runtime pack
         run: node packages/runtime-win32-x64-msvc/scripts/verify.mjs
-      - run: pnpm -r build
+      - run: pnpm build
       - name: Execute Windows WASM rejection regressions (release and dev)
         run: pnpm exec vitest run tests/harness/wasm-rejection.test.ts --reporter=verbose
