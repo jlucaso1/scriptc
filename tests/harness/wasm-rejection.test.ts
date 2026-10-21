@@ -48,7 +48,7 @@ try { await WebAssembly.instantiate(simd); } catch (error) {
         optimization,
         sanitize: process.env["SCRIPTC_SAN"] === "1",
         outDir,
-        outPath: join(outDir, "program"),
+        outPath: join(outDir, process.platform === "win32" ? "program.exe" : "program"),
       });
       expect(result.ok, JSON.stringify(result.diagnostics)).toBe(true);
       if (!result.ok) return;
