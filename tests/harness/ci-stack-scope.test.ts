@@ -179,7 +179,7 @@ test("every expensive CI job is gated and included in the required test check", 
   expect(workflow.jobs.test!.needs).toContain("validation_scope");
   expect(workflow.jobs.test!.needs).toContain("code_quality");
   // A skipped required job reports success, so aggregate even on cancellation.
-  expect(workflow.jobs.test!.if).toBe("${{ always() }}");
+  expect(workflow.jobs.test!.if).toBe(`\${{ always() && (${scopeJob.if!.slice(4, -3)}) }}`);
 });
 
 function runGate(
