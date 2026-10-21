@@ -21,7 +21,7 @@ jobs:
   native:
     if: >-
       github.repository == 'jlucaso1/scriptc' &&
-      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name == 'push' || (github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository)) &&
       contains(fromJSON('["fix/wasm-known-rejection","fix/read-file-sync-url","fix/fs-promises-rm-options"]'), github.head_ref || github.ref_name)
     name: Native regression (${{ matrix.flavor }})
     runs-on: ubuntu-24.04
@@ -85,7 +85,7 @@ jobs:
   wasm_windows:
     if: >-
       github.repository == 'jlucaso1/scriptc' &&
-      (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (github.event_name == 'push' || (github.event_name == 'pull_request' && github.base_ref == 'main' && github.event.pull_request.head.repo.full_name == github.repository)) &&
       (github.head_ref || github.ref_name) == 'fix/wasm-known-rejection'
     name: test (Windows COFF WASM rejection reasons)
     # The official LLVM 22 Windows archives are MSVC-built and the helper
@@ -139,6 +139,6 @@ jobs:
         run: pnpm --filter @scriptc/runtime-win32-x64-msvc build:native
       - name: Verify rebuilt runtime pack
         run: node packages/runtime-win32-x64-msvc/scripts/verify.mjs
-      - run: pnpm -r build
+      - run: pnpm build
       - name: Execute Windows WASM rejection regressions (release and dev)
         run: pnpm exec vitest run tests/harness/wasm-rejection.test.ts --reporter=verbose
