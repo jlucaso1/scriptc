@@ -1631,6 +1631,10 @@ static void scr_wasm_install(void) {
   scr_dyn_handle_install(SCR_DYNH_WASM_GLOBAL, &scr_wasm_ops_Global);
 }
 
+/* Older ABI-compatible program objects have no rejection registry. The
+ * compiler's strong definition replaces this empty default in new objects. */
+__attribute__((weak)) const ScrWasmRejections scr_wasm_rejections = {0, NULL};
+
 /* ── modules ─────────────────────────────────────────────────────────── */
 
 /* The bytes of a BufferSource, or false with Node's TypeError pending. */
@@ -1668,7 +1672,26 @@ static const ScrWasmModuleDesc *scr_wasm_lookup(const uint8_t *data, size_t len)
   return NULL;
 }
 
-static void scr_wasm_not_translated(const char *what) {
+static void scr_wasm_not_translated(const char *what, const uint8_t *data, size_t len) {
+  uint8_t digest[32];
+  bool hashed = false;
+  for (uint64_t i = 0; i < scr_wasm_rejections.count; i++) {
+    const ScrWasmRejection *rejection = &scr_wasm_rejections.modules[i];
+    if (rejection->byte_length != len) continue;
+    if (!hashed) {
+      scr_wasm_sha256(data, len, digest);
+      hashed = true;
+    }
+    if (memcmp(rejection->sha256, digest, 32)) continue;
+    const char *prefix = ": this module was found during the build but was not translated: ";
+    size_t size = strlen(what) + strlen(prefix) + strlen(rejection->reason) + 1;
+    char *message = malloc(size);
+    if (!message) abort();
+    snprintf(message, size, "%s%s%s", what, prefix, rejection->reason);
+    scr_wasm_throw_kind(SCR_WASM_COMPILE_ERROR, message);
+    free(message);
+    return;
+  }
   char msg[400];
   snprintf(msg, sizeof msg,
            "%s: this module was not translated when the program was built (scriptc compiles WebAssembly ahead of "
@@ -1683,7 +1706,7 @@ static ScrDyn *scr_wasm_module_from(ScrDyn *bytes, const char *what, const char 
   if (!scr_wasm_bytes_of(bytes, what, expected, &data, &len)) return NULL;
   const ScrWasmModuleDesc *desc = scr_wasm_lookup(data, len);
   if (!desc) {
-    scr_wasm_not_translated(what);
+    scr_wasm_not_translated(what, data, len);
     return NULL;
   }
   ScrWasmObj *o = scr_wasm_obj_new(SCR_WASM_K_MODULE);

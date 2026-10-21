@@ -1058,13 +1058,14 @@ export interface IrModule {
   wasmCustomSections?: boolean;
 }
 
-/** A WebAssembly module whose bytes the build saw, validated within the
- * translatable feature level. */
+/** A WebAssembly module whose bytes the build saw. */
 export interface IrWasmModule {
   /** Hex SHA-256 of the bytes. */
   sha256: string;
   /** The bytes, base64. */
   bytes: string;
+  /** Why discovery refused translation, absent for translatable modules. */
+  rejectionReason?: string;
 }
 
 /** Verified contract facts, keyed by IR names. */

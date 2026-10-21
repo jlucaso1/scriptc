@@ -1,9 +1,10 @@
-/* The WebAssembly modules translated into a program (IrModule.wasmModules):
- * each module's translation (wasm/translate.ts) and the registry the
- * runtime looks modules up in (scr_wasm_registry, scr_wasm_abi.h). The
+/* The WebAssembly modules discovered by a program (IrModule.wasmModules):
+ * each supported module's translation (wasm/translate.ts), rejection reasons, and
+ * the registries the runtime searches (scr_wasm_abi.h). The
  * translations join the program module, so the native helper optimizes,
  * partitions and caches them with it. Programs that do not use the
  * WebAssembly API carry no wasmModules and emit nothing here. */
+import { llvmBytes, wtf8Bytes } from "../literals.js";
 import type { IrModule } from "../../ir/ir.js";
 import { decodeBase64 } from "../../wasm/base64.js";
 import { translateWasmModule, WasmTranslateError } from "../../wasm/translate.js";
@@ -31,8 +32,8 @@ export function wasmBoundsChecks(options: {
 /** The top-level lines of every translated module plus the registry.
  * `declared` holds the declarations the module already carries; runtime
  * entry points it lacks are declared here. A module the translator
- * cannot translate is left out of the registry, so loading it at run
- * time rejects with the CompileError for untranslated bytes. */
+ * cannot translate enters a separate rejection registry, so loading it
+ * reports the known reason without treating it as executable code. */
 export function emitWasmModules(
   mod: IrModule,
   declared: ReadonlySet<string>,
@@ -43,9 +44,26 @@ export function emitWasmModules(
   const out: string[] = [];
   const decls = new Set(declared);
   const descriptors: string[] = [];
+  const rejections: string[] = [];
+  const reject = (sha256: string, size: number, reason: string): void => {
+    const symbol = `@sc_wasm_rejection_${rejections.length}`;
+    const reasonBytes = wtf8Bytes(reason);
+    out.push(
+      `${symbol} = private constant [${reasonBytes.length + 1} x i8] c"${llvmBytes(reasonBytes)}"`,
+    );
+    const hash: string[] = [];
+    for (const byte of hexBytes(sha256)) hash.push(`i8 ${byte}`);
+    rejections.push(
+      `{ [32 x i8], i64, ptr } { [32 x i8] [${hash.join(", ")}], i64 ${size}, ptr ${symbol} }`,
+    );
+  };
   for (const module of modules) {
     const bytes = decodeBase64(module.bytes);
     if (bytes === null) continue;
+    if (module.rejectionReason !== undefined) {
+      reject(module.sha256, bytes.length, module.rejectionReason);
+      continue;
+    }
     let translation;
     try {
       translation = translateWasmModule(bytes, hexBytes(module.sha256), {
@@ -53,7 +71,10 @@ export function emitWasmModules(
         customSections: mod.wasmCustomSections === true,
       });
     } catch (error) {
-      if (error instanceof WasmTranslateError) continue;
+      if (error instanceof WasmTranslateError) {
+        reject(module.sha256, bytes.length, `translation failed: ${error.message}`);
+        continue;
+      }
       throw error;
     }
     for (const decl of translation.decls) {
@@ -70,6 +91,14 @@ export function emitWasmModules(
     out.push(
       `@sc_wasm_registry_modules = private constant [${descriptors.length} x ptr] [${descriptors.map((d) => `ptr ${d}`).join(", ")}]`,
       `@scr_wasm_registry = constant { i64, ptr } { i64 ${descriptors.length}, ptr @sc_wasm_registry_modules }`,
+    );
+  }
+  if (rejections.length === 0) {
+    out.push(`@scr_wasm_rejections = constant { i64, ptr } { i64 0, ptr null }`);
+  } else {
+    out.push(
+      `@sc_wasm_rejected_modules = private constant [${rejections.length} x { [32 x i8], i64, ptr }] [${rejections.join(", ")}]`,
+      `@scr_wasm_rejections = constant { i64, ptr } { i64 ${rejections.length}, ptr @sc_wasm_rejected_modules }`,
     );
   }
   out.push("");

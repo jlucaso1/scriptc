@@ -851,6 +851,11 @@ jobs:
       - name: Build Windows runtime pack
         run: pnpm --filter @scriptc/runtime-win32-x64-msvc build:native
       - run: pnpm build
+      - name: Windows WASM rejection regressions
+        env:
+          SCRIPTC_TEST_WORKERS: "2"
+          SCRIPTC_SAN: "0"
+        run: pnpm exec vitest run tests/harness/wasm-rejection.test.ts --reporter=verbose
       - name: Windows COFF no-clang object contract
         shell: pwsh
         run: |
