@@ -114,9 +114,42 @@ ScrDyn *scr_fs_read_file_url(ScrUrl *url, const ScrDyn *options) {
     scr_dyn_release(encoding);
     encoding = scr_fs_url_encoding(options, object);
     if (scr_exc_pending()) goto done;
-    ScrStr *name = encoding->kind == SCR_DYN_UNDEF
-      ? scr_str_new("utf8", 4) : scr_dyn_string_coerce_js(encoding);
+    /* Buffer.toString reads its argument before the empty-buffer shortcut,
+     * but does not coerce that argument until there are bytes to decode. */
+    if (bytes->len == 0) {
+      ScrStr *empty = scr_str_new("", 0);
+      result = scr_dyn_new_str(empty);
+      scr_str_release(empty);
+      goto done;
+    }
+    ScrStr *name = NULL;
+    if (encoding->kind == SCR_DYN_UNDEF) name = scr_str_new("utf8", 4);
+    else {
+      /* Node's `encoding += ''` uses the default hint, as does dynamic +. */
+      ScrStr *empty = scr_str_new("", 0);
+      ScrDyn *suffix = scr_dyn_new_str(empty);
+      scr_str_release(empty);
+      ScrDyn *coerced = scr_dyn_add(encoding, suffix);
+      scr_dyn_release(suffix);
+      if (coerced) { name = scr_str_retain(coerced->v.str); scr_dyn_release(coerced); }
+    }
     if (!name) goto done;
+    /* Unknown-encoding diagnostics format the original value with the string
+     * hint, so an object can expose another hook call or throw here. */
+    if (encoding->kind != SCR_DYN_STR && encoding->kind != SCR_DYN_UNDEF &&
+        !scr_bytes_is_encoding(name)) {
+      ScrStr *display = scr_dyn_string_coerce_js(encoding);
+      if (display) {
+        ScrStr *prefix = scr_str_new("Unknown encoding: ", 18);
+        ScrStr *message = scr_str_concat(prefix, display);
+        scr_throw_error_msg_code(SCR_ERR_TYPE, message->data, message->len, "ERR_UNKNOWN_ENCODING");
+        scr_str_release(message);
+        scr_str_release(prefix);
+        scr_str_release(display);
+      }
+      scr_str_release(name);
+      goto done;
+    }
     ScrStr *text = scr_bytes_to_str_checked(bytes, name);
     scr_str_release(name);
     if (text) { result = scr_dyn_new_str(text); scr_str_release(text); }

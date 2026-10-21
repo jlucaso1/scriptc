@@ -34,6 +34,17 @@ try {
   writeFileSync(file, "hello");
   writeFileSync(empty, "");
   for (const path of [file, empty]) {
+    for (const mode of ["prefer-value", "fallback", "throw-value", "throw-string", "invalid"]) {
+      let reads = 0;
+      let hooks = "";
+      const final = {
+        valueOf() { hooks += "v"; if (mode === "throw-value") throw new Error("value hook"); return mode === "fallback" || mode === "throw-string" ? {} : mode === "invalid" ? "bad-encoding" : "hex"; },
+        toString() { hooks += "s"; if (mode === "throw-string") throw new Error("string hook"); return "utf8"; },
+      };
+      const options = { get encoding() { reads++; return reads < 6 ? "hex" : final; } };
+      try { console.log("hooks", path === empty, mode, readFileSync(pathToFileURL(path), options), reads, hooks); }
+      catch (error) { console.log("hook-error", path === empty, mode, error.message, reads, hooks); }
+    }
     for (const last of ["", undefined, "utf8", "hex", "invalid-encoding"]) {
       let reads = 0;
       const options = { get encoding() { reads++; return reads < 6 ? "hex" : last; } };

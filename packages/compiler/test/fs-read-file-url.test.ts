@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { compile } from "../src/index.js";
+import { compile, compileLibrary } from "../src/index.js";
 
 test("readFileSync accepts typed URL paths across Buffer and encoding overloads", async () => {
   const directory = mkdtempSync(join(tmpdir(), "scriptc-fs-read-url-"));
@@ -117,6 +117,48 @@ console.log(readFileSync(existing, "utf8"), existsSync(missing));
         "proxy hooks 0 0\n" +
         "kept false\n",
     );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
+test("library URL reads refuse before producing an unusable archive", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "scriptc-fs-url-library-"));
+  try {
+    const entry = join(directory, "entry.ts");
+    writeFileSync(
+      entry,
+      'import { readFileSync } from "node:fs"; export function result(): number { return readFileSync(new URL("file:///fixture"), "utf8").length; }',
+    );
+    const profilePath = join(directory, "profile.json");
+    writeFileSync(
+      profilePath,
+      JSON.stringify({
+        profile_format: 1,
+        name: "url-read",
+        entry: "entry.ts",
+        emission: "llvm",
+        abi: {
+          prefix: "url_",
+          init_symbol: "url_init",
+          sink_register_symbol: "url_sink",
+          collect_symbol: "url_collect",
+        },
+        exports: [{ export: "result", symbol: "url_result", params: [], returns: "f64" }],
+      }),
+    );
+    const outDir = join(directory, "out");
+    const result = await compileLibrary({ profilePath, outDir });
+    expect(result.ok, JSON.stringify(result.diagnostics)).toBe(false);
+    expect(result.diagnostics).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "SC4005",
+          message: expect.stringContaining("URL-path readFileSync"),
+        }),
+      ]),
+    );
+    expect(existsSync(join(outDir, "entry.lib.a"))).toBe(false);
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

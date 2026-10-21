@@ -15,6 +15,8 @@ import { moduleRuntimeFeatures } from "../ir/runtime-features.js";
 /** libCall families a v1 library artifact refuses, with the surface name the SC4005
  * teaching uses. Prefix match over IrLibFn spellings. */
 const LIB_MODE_REFUSED_PREFIXES: readonly [string, string][] = [
+  // The URL-read wrapper is executable-only in runtime packs.
+  ["fs.readFileUrl", "URL-path readFileSync (not available in library runtime packs)"],
   // fs.exists is the one CALLBACK-async fs op with a real implementation:
   // its fire rides the timer queue (scr_bytes_io.c), which library links
   // exclude — refuse the surface like the rest of the event-loop family.
