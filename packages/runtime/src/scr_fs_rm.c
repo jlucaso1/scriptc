@@ -107,7 +107,15 @@ ScrPromise *scr_fsp_rm_opts_retry(ScrStr *path, bool recursive, bool force, doub
       scr_fsp_rm_integer_valid(max_retries, "options.maxRetries", 4294967295.0) &&
       scr_fsp_rm_integer_valid(retry_delay, "options.retryDelay", 2147483647.0)) {
     if (!recursive) {
-      scr_fs_rm_opts_retry(path, false, force, max_retries, retry_delay);
+      /* Keep initial missing-path validation distinct from an entry that
+       * disappears after validation, which promise rimraf treats as success. */
+      ScrStats *stats = scr_fs_lstat(path);
+      scr_stats_release(stats);
+      if (force && scr_fsp_rm_error_is("ENOENT")) scr_exc_clear();
+      else if (!scr_exc_pending()) {
+        scr_fs_rm_opts_retry(path, false, force, max_retries, retry_delay);
+        if (scr_fsp_rm_error_is("ENOENT")) scr_exc_clear();
+      }
     } else {
       /* Node validates root existence before rimraf; disappearing children
        * and entries that vanish during removal are then harmless ENOENTs. */

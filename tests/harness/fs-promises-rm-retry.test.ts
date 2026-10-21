@@ -22,9 +22,11 @@ test.skipIf(process.platform !== "linux" || process.env["SCRIPTC_SAN"] === "1")(
         import { writeFileSync, existsSync } from "node:fs";
         import { rm } from "node:fs/promises";
         const path = process.env["RM_TARGET"]!;
-        writeFileSync(path, "keep");
+        if (process.env["RM_NONRETRYABLE"] !== "missing") writeFileSync(path, "keep");
         try {
-          const pending = process.env["RM_RECURSIVE"] === "0"
+          const pending = process.env["RM_NONRETRYABLE"] === "vanish-force"
+            ? rm(path, { force: true })
+            : process.env["RM_RECURSIVE"] === "0"
             ? rm(path, { recursive: false, maxRetries: 2, retryDelay: 0 })
             : rm(path, { recursive: true, maxRetries: 2, retryDelay: 0 });
           console.log("promise returned");
@@ -63,6 +65,8 @@ test.skipIf(process.platform !== "linux" || process.env["SCRIPTC_SAN"] === "1")(
           const char *target = getenv("RM_TARGET");
           if (target && strcmp(path, target) == 0) {
             attempts++;
+            const char *mode = getenv("RM_NONRETRYABLE");
+            if (mode && strncmp(mode, "vanish", 6) == 0) { real_unlink(path); errno = ENOENT; return -1; }
             if (attempts <= atoi(getenv("RM_BUSY_COUNT"))) { const char *kind = getenv("RM_NONRETRYABLE"); errno = kind && strcmp(kind, "1") == 0 ? EACCES : EBUSY; return -1; }
           }
           return real_unlink(path);
@@ -76,6 +80,10 @@ test.skipIf(process.platform !== "linux" || process.env["SCRIPTC_SAN"] === "1")(
         ["3", "1", "", "3", "rejected EBUSY true true true"],
         ["2", "0", "", "3", "removed true"],
         ["2", "1", "1", "1", "rejected EACCES true true true"],
+        ["2", "0", "1", "1", "rejected EACCES true true true"],
+        ["0", "0", "vanish-force", "1", "removed true"],
+        ["0", "0", "vanish", "1", "removed true"],
+        ["0", "0", "missing", "0", "rejected ENOENT false true false"],
       ]) {
         const env: NodeJS.ProcessEnv = {
           ...process.env,
