@@ -117,3 +117,18 @@ test("Wasm packs include reactor runtimes without thread-local state or a JS eng
     expect(sources).not.toContain("scr_async.c");
   }
 });
+
+test("URL-path reading has a separate optional executable unit", () => {
+  const unit = matrix.runtime_units.find((entry) => entry.source === "scr_fs_url.c");
+  expect(unit?.predicate).toBe("fsReadUrl");
+  for (const mode of [
+    "library-release",
+    "library-thread-release",
+    "library-dev",
+    "library-thread-dev",
+  ]) {
+    expect(
+      matrix.flavors[mode].runtime_units.some((entry) => entry.source === "scr_fs_url.c"),
+    ).toBe(false);
+  }
+});

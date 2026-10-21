@@ -17,6 +17,16 @@ describe("runtime feature snapshots", () => {
     expr: { kind: "libCall" as const, fn, args: [], type: VOID, loc },
   });
 
+  test("links URL-read wrappers only for URL paths", () => {
+    const mod = module();
+    mod.functions[0]!.body.push(call("fs.readFileSync"));
+    expect(moduleRuntimeFeatures(mod).fsReadUrl).toBe(false);
+    for (const fn of ["fs.readFileUrl"] as const) {
+      mod.functions[0]!.body = [call(fn)];
+      expect(moduleRuntimeFeatures(mod).fsReadUrl).toBe(true);
+    }
+  });
+
   test("updates link requirements after an IR edit without changing earlier snapshots", () => {
     const mod = module();
     const first = moduleRuntimeFeatures(mod);

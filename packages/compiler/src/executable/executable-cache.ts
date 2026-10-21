@@ -70,6 +70,8 @@ export interface EarlyExecutableNativeFeatures {
   eventsOnceSignal?: boolean;
   dynBufferNum?: boolean;
   builtinValues?: boolean;
+  /** URL-path readFileSync wrappers, absent when unused. */
+  fsReadUrl?: boolean;
   events: boolean;
   emitter: boolean;
   symbol: boolean;

@@ -1,4 +1,7 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const url = new URL("https://example.com/invalid");
 const cyclic = {};
@@ -22,3 +25,20 @@ calls = 0;
 const options = { get encoding() { calls++; return "utf8"; } };
 try { readFileSync(url, options); }
 catch (error) { console.log("getter", calls, error.code); }
+
+
+const directory = mkdtempSync(join(tmpdir(), "scriptc-read-url-options-"));
+try {
+  const file = directory + "/bytes";
+  const empty = directory + "/empty";
+  writeFileSync(file, "hello");
+  writeFileSync(empty, "");
+  for (const path of [file, empty]) {
+    for (const last of ["", undefined, "utf8", "hex", "invalid-encoding"]) {
+      let reads = 0;
+      const options = { get encoding() { reads++; return reads < 6 ? "hex" : last; } };
+      try { console.log("last", path === empty, last, readFileSync(pathToFileURL(path), options), reads); }
+      catch (error) { console.log("last-error", path === empty, last, error.code, reads); }
+    }
+  }
+} finally { rmSync(directory, { recursive: true, force: true }); }

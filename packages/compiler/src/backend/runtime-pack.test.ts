@@ -238,6 +238,39 @@ describe("runtime pack manifests", () => {
     expect(guiPlan.driverFlags).toEqual([...defaultPlan.driverFlags, "-Wl,--subsystem,windows"]);
   });
 
+  test("URL-read wrappers are selected only when the overload is used", async () => {
+    const { root, packagePath, manifest } = await fixture();
+    const bytes = "URL reads";
+    const path = "artifacts/url-read.o";
+    await writeFile(join(root, path), bytes);
+    manifest.flavors.release!.runtime_units.push({
+      source: "scr_fs_url.c",
+      predicate: "fsReadUrl",
+      variants: [
+        {
+          id: "default",
+          when: {},
+          defines: [],
+          path,
+          sha256: createHash("sha256").update(bytes).digest("hex"),
+          size: Buffer.byteLength(bytes),
+        },
+      ],
+    });
+    await writeFile(join(root, "runtime-pack.json"), JSON.stringify(manifest));
+    for (const used of [false, true]) {
+      const selection = await loadRuntimePack({
+        target: MACOS_ARM64_TARGET,
+        optimization: "release",
+        resolver: () => packagePath,
+        features: { ...BASE, ...(used ? { fsReadUrl: true } : {}) },
+      });
+      expect(selection.runtimeObjects.map((path) => basename(path))).toEqual(
+        used ? ["base.o", "url-read.o"] : ["base.o"],
+      );
+    }
+  });
+
   test("selection chooses the most-specific variant and feature archive", async () => {
     const { packagePath } = await fixture();
     const resolver = () => packagePath;
