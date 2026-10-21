@@ -99,3 +99,113 @@ test.skipIf(process.platform !== "linux" || process.env["SCRIPTC_SAN"] === "1")(
     }
   },
 );
+
+test.skipIf(process.platform !== "linux" || process.env["SCRIPTC_SAN"] === "1")(
+  "recursive fs.promises.rm gives each child its own retry budget",
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), "scriptc-rm-children-"));
+    try {
+      const entry = join(dir, "main.ts");
+      await writeFile(
+        entry,
+        `
+        import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+        import { rm } from "node:fs/promises";
+        const path = process.env["RM_TARGET"]!;
+        mkdirSync(path, { recursive: true });
+        writeFileSync(path + "/a", "a");
+        writeFileSync(path + "/b", "b");
+        try {
+          const pending = rm(path, { recursive: true, maxRetries: 1, retryDelay: 0 });
+          console.log("promise returned");
+          await pending;
+          console.log("removed", !existsSync(path));
+        } catch (error) {
+          if (error instanceof Error) {
+            const err = error as NodeJS.ErrnoException;
+            console.log("rejected", err.code, err.syscall === "unlink", err.path === path + "/a");
+          }
+        }
+      `,
+      );
+      const result = await compile(entry, {
+        backend: "llvm",
+        outDir: dir,
+        outPath: join(dir, "program"),
+      });
+      expect(result.ok, JSON.stringify(result.diagnostics)).toBe(true);
+      if (!result.ok) return;
+      const shim = join(dir, "children.c");
+      const library = join(dir, "children.so");
+      await writeFile(
+        shim,
+        `
+        #define _GNU_SOURCE
+        #include <dlfcn.h>
+        #include <errno.h>
+        #include <stdatomic.h>
+        #include <stdio.h>
+        #include <stdlib.h>
+        #include <string.h>
+        static atomic_uint a_attempts, b_attempts;
+        int unlink(const char *path) {
+          int (*real_unlink)(const char *) = dlsym(RTLD_NEXT, "unlink");
+          const char *target = getenv("RM_TARGET");
+          size_t length = target ? strlen(target) : 0;
+          if (target && strncmp(path, target, length) == 0 && path[length] == '/') {
+            const char *name = path + length + 1;
+            const char *scenario = getenv("RM_CHILD_CASE");
+            if (strcmp(name, "a") == 0) {
+              unsigned attempt = atomic_fetch_add(&a_attempts, 1) + 1;
+              if (strcmp(scenario, "denied") == 0) { errno = EACCES; return -1; }
+              if (strcmp(scenario, "exhausted") == 0 ||
+                  (strcmp(scenario, "success") == 0 && attempt == 1) ||
+                  (strcmp(scenario, "parent-retry") == 0 && attempt <= 2)) { errno = EBUSY; return -1; }
+              if (strcmp(scenario, "vanished") == 0) { real_unlink(path); errno = ENOENT; return -1; }
+            } else if (strcmp(name, "b") == 0) {
+              unsigned attempt = atomic_fetch_add(&b_attempts, 1) + 1;
+              if ((strcmp(scenario, "success") == 0 || strcmp(scenario, "parent-retry") == 0) && attempt == 1) { errno = EBUSY; return -1; }
+            }
+          }
+          return real_unlink(path);
+        }
+        __attribute__((destructor)) static void report(void) {
+          if (strcmp(getenv("RM_CHILD_CASE"), "success") == 0 || strcmp(getenv("RM_CHILD_CASE"), "parent-retry") == 0)
+            fprintf(stderr, "a=%u,b=%u\\n", atomic_load(&a_attempts), atomic_load(&b_attempts));
+          else fprintf(stderr, "a=%u\\n", atomic_load(&a_attempts));
+        }
+      `,
+      );
+      await exec("clang", ["-shared", "-fPIC", shim, "-ldl", "-o", library]);
+      for (const [scenario, expected, attempts] of [
+        ["success", "removed true", "a=2,b=2"],
+        ["parent-retry", "removed true", "a=3,b=2"],
+        ["exhausted", "rejected EBUSY true true", "a=4"],
+        ["denied", "rejected EACCES true true", "a=1"],
+        ["vanished", "removed true", "a=1"],
+      ]) {
+        const target = join(dir, "target");
+        for (const command of [
+          [process.execPath, [entry]],
+          [result.binaryPath, []],
+        ] as const) {
+          await rm(target, { recursive: true, force: true });
+          const { stdout, stderr } = await exec(command[0], [...command[1]], {
+            env: {
+              ...process.env,
+              LD_PRELOAD: library,
+              RM_TARGET: target,
+              RM_CHILD_CASE: scenario,
+            },
+          });
+          expect(stdout, `${scenario} ${command[0] === process.execPath ? "Node" : "native"}`).toBe(
+            `promise returned\n${expected}\n`,
+          );
+          expect(stderr, scenario).toBe(`${attempts}\n`);
+        }
+      }
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+);

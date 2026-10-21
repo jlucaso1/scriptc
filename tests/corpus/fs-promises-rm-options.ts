@@ -20,6 +20,8 @@ try {
   const tree = join(dir, "tree");
   mkdirSync(join(tree, "child"), { recursive: true });
   writeFileSync(join(tree, "child", "data"), "data");
+  writeFileSync(join(tree, "second"), "data");
+  mkdirSync(join(tree, "empty"));
   await rm(tree, { recursive: true, force: true, maxRetries: 2, retryDelay: 1 });
   console.log("tree", existsSync(tree));
   mkdirSync(tree);
