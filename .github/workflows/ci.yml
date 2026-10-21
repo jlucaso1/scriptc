@@ -32,7 +32,7 @@ jobs:
   # PRs, pushes and incomplete metadata always retain full validation.
   validation_scope:
     # These three fork branches use the bounded native regression workflow.
-    if: ${{ github.repository != 'jlucaso1/scriptc' || !contains(fromJSON('["fix/wasm-known-rejection","fix/read-file-sync-url","fix/fs-promises-rm-options"]'), github.head_ref || github.ref_name) }}
+    if: ${{ github.repository != 'jlucaso1/scriptc' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || !contains(fromJSON('["fix/wasm-known-rejection","fix/read-file-sync-url","fix/fs-promises-rm-options"]'), github.head_ref || github.ref_name) }}
     name: Select CI scope
     runs-on: ubuntu-24.04
     timeout-minutes: 5
@@ -929,7 +929,7 @@ jobs:
         mobile_runtime_packs_ios,
       ]
     # Run even after failed or cancelled lanes: skipped required jobs allow merging.
-    if: ${{ always() && (github.repository != 'jlucaso1/scriptc' || !contains(fromJSON('["fix/wasm-known-rejection","fix/read-file-sync-url","fix/fs-promises-rm-options"]'), github.head_ref || github.ref_name)) }}
+    if: ${{ always() && (github.repository != 'jlucaso1/scriptc' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) || !contains(fromJSON('["fix/wasm-known-rejection","fix/read-file-sync-url","fix/fs-promises-rm-options"]'), github.head_ref || github.ref_name)) }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

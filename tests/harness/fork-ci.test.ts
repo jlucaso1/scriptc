@@ -46,8 +46,11 @@ test("fork jobs are restricted to the three same-repository branches", () => {
         expect(evaluate(full.jobs.validation_scope.if, github)).toBe(!selected);
         expect(evaluate(full.jobs.test.if, github)).toBe(!selected);
         github.event.pull_request.head.repo.full_name = "outside/scriptc";
-        if (event_name === "pull_request")
+        if (event_name === "pull_request") {
           expect(evaluate(fork.jobs.native.if, github)).toBe(false);
+          expect(evaluate(full.jobs.validation_scope.if, github)).toBe(true);
+          expect(evaluate(full.jobs.test.if, github)).toBe(true);
+        }
       }
 });
 
