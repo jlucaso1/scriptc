@@ -27,31 +27,34 @@ const evaluate = (expression: string, github: object) =>
     () => true,
   );
 
-test("fork jobs are restricted to the three same-repository branches", () => {
+test("full CI is deferred only for events covered by the fork workflow", () => {
   for (const repository of ["jlucaso1/scriptc", "vercel-labs/scriptc", "other/scriptc"])
     for (const ref_name of [...branches, "main", "unrelated"])
-      for (const event_name of ["push", "pull_request"]) {
-        const github = {
-          repository,
-          ref_name,
-          head_ref: event_name === "pull_request" ? ref_name : "",
-          event_name,
-          event: { pull_request: { head: { repo: { full_name: repository } } } },
-        };
-        const selected = repository === "jlucaso1/scriptc" && branches.includes(ref_name);
-        expect(evaluate(fork.jobs.native.if, github)).toBe(selected);
-        expect(evaluate(fork.jobs.wasm_windows.if, github)).toBe(
-          selected && ref_name === branches[0],
-        );
-        expect(evaluate(full.jobs.validation_scope.if, github)).toBe(!selected);
-        expect(evaluate(full.jobs.test.if, github)).toBe(!selected);
-        github.event.pull_request.head.repo.full_name = "outside/scriptc";
-        if (event_name === "pull_request") {
-          expect(evaluate(fork.jobs.native.if, github)).toBe(false);
-          expect(evaluate(full.jobs.validation_scope.if, github)).toBe(true);
-          expect(evaluate(full.jobs.test.if, github)).toBe(true);
-        }
-      }
+      for (const event_name of ["push", "pull_request", "workflow_dispatch", "schedule"])
+        for (const base_ref of ["main", "other-base", ""])
+          for (const headRepository of [repository, "outside/scriptc"]) {
+            const github = {
+              repository,
+              ref_name,
+              head_ref: event_name === "pull_request" ? ref_name : "",
+              base_ref,
+              event_name,
+              event: { pull_request: { head: { repo: { full_name: headRepository } } } },
+            };
+            const coveredEvent =
+              event_name === "push" ||
+              (event_name === "pull_request" &&
+                base_ref === "main" &&
+                headRepository === repository);
+            const selected =
+              repository === "jlucaso1/scriptc" && branches.includes(ref_name) && coveredEvent;
+            expect(evaluate(fork.jobs.native.if, github)).toBe(selected);
+            expect(evaluate(fork.jobs.wasm_windows.if, github)).toBe(
+              selected && ref_name === branches[0],
+            );
+            expect(evaluate(full.jobs.validation_scope.if, github)).toBe(!selected);
+            expect(evaluate(full.jobs.test.if, github)).toBe(!selected);
+          }
 });
 
 test("fork workflow uses read-only hosted runners and tests native success paths", () => {
