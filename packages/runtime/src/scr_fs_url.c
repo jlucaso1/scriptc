@@ -55,6 +55,12 @@ static ScrDyn *scr_fs_url_encoding(const ScrDyn *options, bool object) {
  * have already evaluated, so changes to the URL during options evaluation
  * and encoding getters remain visible to the conversion. */
 ScrDyn *scr_fs_read_file_url(ScrUrl *url, const ScrDyn *options) {
+  /* Presence checks would invoke Proxy has traps that Node does not call. */
+  if (options->kind == SCR_DYN_PROXY) {
+    static const char message[] = "readFileSync URL proxy options have no native lowering";
+    scr_throw_error_msg_code(SCR_ERR_ERROR, message, sizeof message - 1, "SC2020");
+    return NULL;
+  }
   bool object = options->kind != SCR_DYN_NULL && scr_dyn_is_object(options);
   if (!object && options->kind != SCR_DYN_STR && options->kind != SCR_DYN_UNDEF &&
       options->kind != SCR_DYN_NULL && !scr_dyn_is_callable(options)) {

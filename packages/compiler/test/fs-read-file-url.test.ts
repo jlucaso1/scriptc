@@ -85,6 +85,12 @@ attempt(late, existing);
 console.log("late reads", lateReads);
 attempt({ buffer: Buffer.alloc(1) }, existing);
 attempt({ signal: { aborted: false } }, existing);
+let hasCalls = 0;
+let encodingReads = 0;
+const proxy = new Proxy({ get encoding() { encodingReads++; return "utf8"; } }, { has() { hasCalls++; return false; } });
+attempt(proxy, existing);
+attempt(proxy, missing);
+console.log("proxy hooks", hasCalls, encodingReads);
 console.log(readFileSync(existing, "utf8"), existsSync(missing));
 `,
     );
@@ -107,6 +113,8 @@ console.log(readFileSync(existing, "utf8"), existsSync(missing));
         "late reads 3\n" +
         "SC2020 readFileSync URL option 'buffer' has no native lowering\n" +
         "SC2020 readFileSync URL option 'signal' has no native lowering\n" +
+        "SC2020 readFileSync URL proxy options have no native lowering\n".repeat(2) +
+        "proxy hooks 0 0\n" +
         "kept false\n",
     );
   } finally {
