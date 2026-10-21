@@ -617,6 +617,19 @@ function encodingOptions(lowerer: Lowerer, options: ts.Expression, type: IrType)
   return typeEquals(value.type, type) ? value : lowerer.coerceInto(options, value, type);
 }
 
+/** Convert typed URL paths with the same validation as fileURLToPath. */
+export function lowerFsReadPath(lowerer: Lowerer, path: ts.Expression, loc: SrcLoc): IrExpr {
+  if (lowerer.mapTypeOf(lowerer.typeOf(path))?.kind !== "url")
+    return lowerer.lowerExprExpecting(path, STRING);
+  return {
+    kind: "libCall",
+    fn: "url.fileURLToPathUrl",
+    args: [lowerer.lowerExpr(path)],
+    type: STRING,
+    loc,
+  };
+}
+
 /** Encoding-bearing reads share Buffer's decoder and runtime alias checks.
  * Keep the read and encoding evaluation in source order in one helper. */
 export function lowerFsEncodedRead(
@@ -639,8 +652,12 @@ export function lowerFsEncodedRead(
     )
       return null;
   }
-  const sourceType = descriptor ? F64 : STRING;
-  const source = lowerer.lowerExprExpecting(expr.arguments.nodes[0]!, sourceType);
+  const sourceNode = expr.arguments.nodes[0]!;
+  const urlPath = !descriptor && lowerer.mapTypeOf(lowerer.typeOf(sourceNode))?.kind === "url";
+  const source = urlPath
+    ? lowerer.lowerExpr(sourceNode)
+    : lowerer.lowerExprExpecting(sourceNode, descriptor ? F64 : STRING);
+  if (urlPath) return lowerFsReadUrlResult(lowerer, expr, source, lowerer.lowerExpr(options), loc);
   const encoding: IrExpr =
     optionsType.kind === "string"
       ? lowerer.lowerExprExpecting(options, STRING)
@@ -1083,6 +1100,27 @@ export function lowerFsWriteOptionsCall(
   return finishWrite(optionValues);
 }
 
+/** Runtime URL reads validate encoding before converting the saved URL object. */
+function lowerFsReadUrlResult(
+  lowerer: Lowerer,
+  expr: ts.CallExpression,
+  url: IrExpr,
+  encoding: IrExpr,
+  loc: SrcLoc,
+): IrExpr {
+  const result: IrExpr = {
+    kind: "libCall",
+    fn: "fs.readFileUrl",
+    args: [url, lowerer.coerceToExpected(encoding, DYN)],
+    type: DYN,
+    loc,
+  };
+  const type = lowerer.mapTypeOf(lowerer.typeOf(expr));
+  return type?.kind === "string" || type?.kind === "bytes"
+    ? { kind: "dynCheck", value: result, type, loc }
+    : result;
+}
+
 export function lowerFsReadPathCall(
   lowerer: Lowerer,
   expr: ts.CallExpression,
@@ -1097,6 +1135,24 @@ export function lowerFsReadPathCall(
   // throws its path-annotated TypeError. The fd forms (a number
   // argument) and literal-utf8 reads keep their existing lowerings.
   const pathV = lowerer.lowerExpr(expr.arguments.nodes[0]!);
+  if (pathV.type.kind === "url" && expr.arguments.nodes.length === 2) {
+    const encoding = lowerer.lowerExpr(expr.arguments.nodes[1]!);
+    if (encoding.type.kind === "record") {
+      const fields = lowerer.shapes.get(encoding.type.shapeId)?.fields;
+      if (
+        !fields?.some((field) => field.name === "encoding") ||
+        fields.some((field) => field.name !== "encoding")
+      )
+        return null;
+    } else if (
+      encoding.type.kind !== "string" &&
+      encoding.type.kind !== "dyn" &&
+      encoding.type.kind !== "nullT" &&
+      encoding.type.kind !== "undefinedT"
+    )
+      return null;
+    return lowerFsReadUrlResult(lowerer, expr, pathV, encoding, loc);
+  }
   if (pathV.type.kind === "string" || pathV.type.kind === "dyn") {
     const pathArg: IrExpr =
       pathV.type.kind === "dyn" ? { kind: "dynCheck", value: pathV, type: STRING, loc } : pathV;

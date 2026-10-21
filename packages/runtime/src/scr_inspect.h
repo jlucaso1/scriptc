@@ -114,6 +114,7 @@ ScrBytes *scr_fs_read_file_bytes(ScrStr *path); /* +1 */
  * value — a Buffer box for nullish/empty encodings, a decoded string otherwise — or NULL
  * with the exception pending. */
 ScrDyn *scr_fs_read_file_sync_dyn(ScrStr *path, const ScrDyn *enc);
+ScrDyn *scr_fs_read_file_url(ScrUrl *url, const ScrDyn *enc);
 ScrStr *scr_fs_read_file_encoded(ScrStr *path, ScrStr *encoding);
 ScrStr *scr_fs_read_fd_encoded(double fd, ScrStr *encoding);
 ScrDyn *scr_fs_callback_value(ScrStr *member);

@@ -15,6 +15,7 @@ import {
   lowerFsWriteSyncCall,
   lowerFsReadDescriptorCall,
   lowerFsEncodedRead,
+  lowerFsReadPath,
   lowerFsPromisesEncodedRead,
   lowerFsMkdirSyncCall,
   lowerFsOpendirCall,
@@ -240,7 +241,7 @@ export function lowerBuiltinModuleCall(
     expr.arguments.nodes.length === 1 &&
     lowerer.mapTypeOf(lowerer.typeOf(expr.arguments.nodes[0]!))?.kind !== "f64"
   ) {
-    const path = lowerer.lowerExprExpecting(expr.arguments.nodes[0]!, STRING);
+    const path = lowerFsReadPath(lowerer, expr.arguments.nodes[0]!, loc);
     return { kind: "libCall", fn: "fs.readFileSyncBytes", args: [path], type: BYTES_U8, loc };
   }
   if (

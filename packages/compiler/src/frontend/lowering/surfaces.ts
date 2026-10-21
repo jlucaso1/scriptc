@@ -2038,6 +2038,7 @@ export const BUILTIN_MODULE_FN_ALIASES: Record<
     // The Buffer form (no encoding), the fd forms (readFileSync(fd[,
     // "utf8"])), and the checked-dynamic encoding form.
     readFileSync: [
+      "fs.readFileUrl",
       "fs.readFileSyncBuf",
       "fs.readFileSyncBytes",
       "fs.readFileSyncDyn",

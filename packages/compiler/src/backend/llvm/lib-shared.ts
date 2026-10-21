@@ -1006,6 +1006,7 @@ export const LIB_FN_SYMS: Record<string, string> = {
   "insp.dynS": "scr_insp_dyn_s",
   "fs.readFileSyncDyn": "scr_fs_read_file_sync_dyn",
   "fs.readFileEncoded": "scr_fs_read_file_encoded",
+  "fs.readFileUrl": "scr_fs_read_file_url",
   "fs.readFdEncoded": "scr_fs_read_fd_encoded",
   // Loose generic-shaped stragglers the burn-down surfaced alongside the
   // dyn head: the x509 PEM walks and stdin raw-mode throw catchably (the

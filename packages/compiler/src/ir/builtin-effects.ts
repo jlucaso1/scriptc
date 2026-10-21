@@ -210,6 +210,7 @@ export const MAY_THROW_LIB_FNS: ReadonlySet<IrLibFn> = new Set([
   "http.reqSetEncoding",
   "fs.readFileSyncBuf",
   "fs.readFileSyncDyn",
+  "fs.readFileUrl",
   "fs.readFileEncoded",
   "fs.readFdEncoded",
   // tls/https runtime options records: the walks throw the catchable

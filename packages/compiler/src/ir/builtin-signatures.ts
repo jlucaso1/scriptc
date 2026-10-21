@@ -530,6 +530,7 @@ export const LIB_FN_SIGS = defineLibFnSignatures({
    * encodings throw the "not supported yet" Error, unknown names throw
    * ERR_UNKNOWN_ENCODING. */
   "fs.readFileSyncDyn": { argTypes: [STRING, DYN], result: DYN },
+  "fs.readFileUrl": { argTypes: [URL_T, DYN], result: DYN },
   "fs.writeFileSync": { argTypes: [STRING, STRING], result: VOID },
   "fs.appendFileSync": { argTypes: [STRING, STRING], result: VOID },
   "fs.existsSync": { argTypes: [STRING], result: BOOL },

@@ -1379,13 +1379,13 @@ interface ImportMeta {
  * `recursive`); empty directories go through `rmdirSync`. */
 declare module "node:fs" {
   import { Readable, Writable } from "stream";
-  export function readFileSync(path: string | number, encoding: BufferEncoding): string;
+  export function readFileSync(path: string | number | URL, encoding: BufferEncoding): string;
   export function readFileSync(
-    path: string | number,
+    path: string | number | URL,
     options: { encoding: BufferEncoding },
   ): string;
-  export function readFileSync(path: string | number): Buffer;
-  export function readFileSync(path: string, options: unknown): string | Buffer;
+  export function readFileSync(path: string | number | URL): Buffer;
+  export function readFileSync(path: string | URL, options: unknown): string | Buffer;
   /* Error-first callbacks select string or Buffer data from their encoding.
    * Unknown options retain that union until the caller validates the value. */
   export function readFile(

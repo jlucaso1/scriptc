@@ -120,6 +120,88 @@ ScrDyn *scr_fs_read_file_sync_dyn(ScrStr *path, const ScrDyn *enc) {
   }
 }
 
+/* Keep each encoding property read: accessors can change the encoding or the
+ * URL between getOptions validation, fast-path selection, and decoding. */
+static ScrDyn *scr_fs_url_encoding(const ScrDyn *options, bool object) {
+  if (object) {
+    ScrDyn *view = options->kind == SCR_DYN_TYPED_REF
+      ? scr_dyn_typed_ref_materialize(options) : scr_dyn_retain((ScrDyn *)options);
+    ScrDyn *value = view ? scr_dyn_obj_read(view, "encoding", 8) : NULL;
+    scr_dyn_release(view);
+    return value;
+  }
+  return scr_dyn_retain((ScrDyn *)(options->kind == SCR_DYN_STR ? options : scr_dyn_undefined()));
+}
+
+/* readFileSync validates encoding before converting a URL path. Its operands
+ * have already evaluated, so changes to the URL during options evaluation
+ * and encoding getters remain visible to the conversion. */
+ScrDyn *scr_fs_read_file_url(ScrUrl *url, const ScrDyn *options) {
+  bool object = options->kind != SCR_DYN_NULL && scr_dyn_is_object(options);
+  if (!object && options->kind != SCR_DYN_STR && options->kind != SCR_DYN_UNDEF &&
+      options->kind != SCR_DYN_NULL && !scr_dyn_is_callable(options)) {
+    scr_dyn_arg_type_fail("options", "of type string or an instance of Object", options);
+    return NULL;
+  }
+  ScrDyn *encoding = scr_fs_url_encoding(options, object);
+  ScrDyn *result = NULL;
+  ScrStr *path = NULL;
+  ScrBytes *bytes = NULL;
+  if (scr_exc_pending()) goto done;
+  if (encoding->kind != SCR_DYN_STR || !scr_fs_str_is(encoding->v.str, "buffer")) {
+    scr_dyn_release(encoding);
+    encoding = scr_fs_url_encoding(options, object);
+    if (scr_exc_pending()) goto done;
+    if (scr_dyn_truthy(encoding)) {
+      if (encoding->kind != SCR_DYN_STR) {
+        scr_dyn_arg_value_fail("encoding", "is invalid encoding", encoding);
+        goto done;
+      }
+      if (!scr_fs_read_encoding_valid(encoding->v.str)) goto done;
+    }
+  }
+  scr_dyn_release(encoding);
+  encoding = scr_fs_url_encoding(options, object);
+  if (scr_exc_pending()) goto done;
+  bool utf8 = encoding->kind == SCR_DYN_STR && scr_fs_str_is(encoding->v.str, "utf8");
+  if (!utf8) {
+    scr_dyn_release(encoding);
+    encoding = scr_fs_url_encoding(options, object);
+    if (scr_exc_pending()) goto done;
+    utf8 = encoding->kind == SCR_DYN_STR && scr_fs_str_is(encoding->v.str, "utf-8");
+  }
+  path = scr_url_to_path(url);
+  if (!path) goto done;
+  if (utf8) {
+    ScrStr *text = scr_fs_read_file(path);
+    if (text) { result = scr_dyn_new_str(text); scr_str_release(text); }
+    goto done;
+  }
+  bytes = scr_fs_read_file_bytes(path);
+  if (!bytes) goto done;
+  scr_dyn_release(encoding);
+  encoding = scr_fs_url_encoding(options, object);
+  if (scr_exc_pending()) goto done;
+  if (!scr_dyn_truthy(encoding)) result = scr_dyn_new_buffer(bytes);
+  else {
+    scr_dyn_release(encoding);
+    encoding = scr_fs_url_encoding(options, object);
+    if (scr_exc_pending()) goto done;
+    ScrStr *name = encoding->kind == SCR_DYN_UNDEF
+      ? scr_str_new("utf8", 4) : scr_dyn_string_coerce_js(encoding);
+    if (!name) goto done;
+    ScrStr *text = scr_fs_decode_read(bytes, name);
+    bytes = NULL;
+    scr_str_release(name);
+    if (text) { result = scr_dyn_new_str(text); scr_str_release(text); }
+  }
+done:
+  scr_dyn_release(encoding);
+  scr_str_release(path);
+  scr_bytes_release(bytes);
+  return result;
+}
+
 static void scr_fs_write_bytes_common(ScrStr *path, const ScrBytes *data, const char *mode) {
   if (!scr_fs_path_ok(path, "path")) return;
   SCR_BYTES_SNAPSHOT(data);
