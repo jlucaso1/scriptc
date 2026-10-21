@@ -8,8 +8,7 @@
 #include <stdio.h>
 
 ScrPromise *scr_fsp_rm_opts(ScrStr *path, bool recursive, bool force) {
-  scr_fs_rm_opts(path, recursive, force);
-  return scr_promise_settled_void();
+  return scr_fsp_rm_opts_retry(path, recursive, force, 0, 100);
 }
 
 static bool scr_fsp_rm_integer_valid(double value, const char *name, double maximum) {
