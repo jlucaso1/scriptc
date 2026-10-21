@@ -76,6 +76,7 @@ jobs:
             fix/fs-promises-rm-options)
               pnpm exec vitest run packages/compiler/test/fs-promises-rm-options.test.ts packages/compiler/src/backend/executable-features.test.ts packages/compiler/src/ir/runtime-features.test.ts packages/compiler/src/backend/runtime-pack.test.ts packages/runtime-pack-common/test/library-matrix.test.ts
               pnpm exec vitest run tests/harness/differential.test.ts tests/harness/llvm-differential.test.ts -t 'fs-promises-rm-options|1630-rmsync-retry-options'
+              pnpm exec vitest run tests/harness/fs-promises-rm-permissions.test.ts
               if [ "$SCRIPTC_SAN" != 1 ]; then
                 pnpm exec vitest run tests/harness/fs-promises-rm-retry.test.ts
               fi
