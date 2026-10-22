@@ -342,6 +342,14 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(exercised.size).toBe(52);
   });
 
+  test("SIMD stores check the full range even with guard pages", () => {
+    const bytes = Buffer.from(simdFixtures.find((f) => f.name === "store-param")!.base64, "base64");
+    const text = translateWasmModule(bytes, SHA, { boundsChecks: false }).text.join("\n");
+    expect(text).toContain("icmp ugt i64");
+    expect(text).toContain("store volatile <16 x i8>");
+    expect(text.indexOf("icmp ugt i64")).toBeLessThan(text.indexOf("store volatile <16 x i8>"));
+  });
+
   test("relaxed SIMD keeps its unsupported status", () => {
     const instructions = [
       0,

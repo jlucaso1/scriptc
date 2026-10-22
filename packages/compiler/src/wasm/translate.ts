@@ -1016,11 +1016,16 @@ class FunctionTranslator {
   }
 
   /** The address of an access of `bytes` bytes at `addr + offset`. */
-  address(addr: string, offset: number, bytes: number): string {
+  address(addr: string, offset: number, bytes: number, checkStore = false): string {
     const wide = this.emit(`zext i32 ${addr} to i64`);
     const ea = offset === 0 ? wide : this.emit(`add i64 ${wide}, ${offset}`);
-    if (this.checked) {
-      const size = this.emit(`load i64, ptr ${this.memSlots!.size}`);
+    if (this.checked || checkStore) {
+      // A vector store may be legalized into several scalar stores. Check
+      // the whole range first so a trap cannot leave a partial write.
+      const sizePtr = this.checked
+        ? this.memSlots!.size
+        : this.emit(`getelementptr inbounds i8, ptr ${this.loadPtrSlot(OFF_MEMORY)}, i64 8`);
+      const size = this.emit(`load i64, ptr ${sizePtr}`);
       const endAddr = this.emit(`add i64 ${ea}, ${bytes}`);
       const oob = this.emit(`icmp ugt i64 ${endAddr}, ${size}`);
       const ok = this.label("ok");
@@ -2106,7 +2111,7 @@ class FunctionTranslator {
                 : sub === 92
                   ? 4
                   : 8;
-      const ptr = this.address(addr, offset, bytes);
+      const ptr = this.address(addr, offset, bytes, store);
       if (sub === 11) {
         this.add(`  store volatile ${vt} ${input}, ptr ${ptr}, align 1`);
         return;

@@ -76,7 +76,7 @@ for (let i = 0; i < modules.length; i++) {
     try {
       console.log(address, String(x.run(address)), new Uint8Array(x.memory.buffer, 0, 64).join(","));
     } catch (error) {
-      console.log(address, error.name, error.message);
+      console.log(address, error.name, error.message, new Uint8Array(x.memory.buffer, 65504, 32).join(","));
     }
   }
 }
