@@ -1,5 +1,5 @@
 import * as ts from "../ts7/adapter.js";
-import { type IrType, typeEquals, arrayOf } from "../../ir/ir.js";
+import { type IrType, typeEquals, typeKey, arrayOf } from "../../ir/ir.js";
 import type { Lowerer } from "./lowerer.js";
 import type { FileParts } from "./lower-modules.js";
 
@@ -43,6 +43,44 @@ export function filterTupleView(lowerer: Lowerer, stored: IrType, view: IrType):
       (fromId !== null && targetArms.every((arm) => lowerer.armTag(fromId, arm) >= 0))
     );
   });
+}
+
+/** A boundary must not rebuild a retained tuple, including when it sits
+ * inside an array, union or callback signature. */
+export function filterTupleConversionCopies(
+  lowerer: Lowerer,
+  source: IrType,
+  target: IrType,
+): boolean {
+  const stored = new Set<string>();
+  for (const view of lowerer.filterViewCalls.values())
+    if (view.kind === "array" && view.elem.kind === "record") stored.add(view.elem.shapeId);
+  const seen = new Set<string>();
+  const copies = (from: IrType, to: IrType): boolean => {
+    if (typeEquals(from, to)) return false;
+    const key = `${typeKey(from)}:${typeKey(to)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (from.kind === "union")
+      return (lowerer.unions.get(from.unionId)?.arms ?? []).some((arm) => copies(arm, to));
+    if (to.kind === "union") {
+      const arms = lowerer.unions.get(to.unionId)?.arms ?? [];
+      return !arms.some((arm) => typeEquals(from, arm)) && arms.some((arm) => copies(from, arm));
+    }
+    if (from.kind === "array" && to.kind === "array") return copies(from.elem, to.elem);
+    if (from.kind === "func" && to.kind === "func")
+      return (
+        copies(from.ret, to.ret) ||
+        from.params.some((param, i) => to.params[i] && copies(param, to.params[i]!))
+      );
+    return (
+      from.kind === "record" &&
+      to.kind === "record" &&
+      (stored.has(from.shapeId) || stored.has(to.shapeId)) &&
+      (filterTupleView(lowerer, from, to) || filterTupleView(lowerer, to, from))
+    );
+  };
+  return copies(source, target);
 }
 
 /** Choose storage for filter results and their binding aliases before any

@@ -98,3 +98,15 @@ console.log(result.accepted + 1, Object.keys(result).join(","));
 console.log(entries[0]![1]);
 for (const entry of chosen) entry[1] = entry[1] + 1;
 console.log(entries[0]![1], entries[2]![1]);
+
+const callbackSource: [string, string | number][] = [["callback", 1]];
+const callbackNumbers = callbackSource.filter((entry): entry is [string, number] =>
+  typeof entry[1] === "number");
+callbackNumbers.forEach(entry => {
+  const local = entry;
+  const again = local;
+  again[1] = 7;
+});
+console.log(callbackSource[0]![1]);
+[callbackNumbers[0]] = [["replacement", 2]];
+console.log(callbackNumbers[0]![0], callbackNumbers[0]![1], callbackSource[0]![0]);

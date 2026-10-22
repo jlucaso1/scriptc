@@ -1,4 +1,4 @@
-import { analyzeFilterViews } from "./filter-views.js";
+import { analyzeFilterViews, filterTupleConversionCopies } from "./filter-views.js";
 import { relieveHeapPressure } from "../../heap-pressure.js";
 import { onlyForwarded, stripTypeWrappers } from "./typed-arguments.js";
 import {
@@ -9224,6 +9224,16 @@ export class Lowerer {
    * else (including a DIFFERENT union) is left for requireExactShape, which
    * rejects union mismatches with SC2003. */
   coerceToExpected(expr: IrExpr, expected: IrType): IrExpr {
+    if (this.filterViewCalls.size > 0 && filterTupleConversionCopies(this, expr.type, expected)) {
+      this.pushDiag(
+        unsupportedDiag(
+          "SC1090",
+          expr.loc,
+          "converting a retained tuple to a different storage layout (keep its stored layout or construct a fresh tuple literal at the destination)",
+        ),
+      );
+      throw new PoisonError();
+    }
     // A comma expression ending in a unit literal (`return log(), null`):
     // its effects run first, unchanged, and the unit value takes the
     // destination's representation (a bare unit literal has none).
@@ -10362,6 +10372,12 @@ export class Lowerer {
     if (expected?.kind === "record") {
       let x = node;
       while (ts.isParenthesizedExpression(x)) x = x.expression;
+      if (
+        this.filterViewCalls.size > 0 &&
+        ts.isArrayLiteralExpression(x) &&
+        this.shapes.get(expected.shapeId)?.tuple
+      )
+        return this.coerceInto(node, this.lowerArrayLiteral(x, expected), expected);
       if (ts.isObjectLiteralExpression(x)) {
         return this.coerceInto(node, this.lowerObjectLiteral(x, expected), expected);
       }

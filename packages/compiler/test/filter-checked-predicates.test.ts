@@ -22,6 +22,45 @@ async function run(source: string): Promise<ReturnType<typeof spawnSync>> {
   }
 }
 
+test.skipIf(process.platform === "win32")("callback aliases keep the stored tuple", async () => {
+  const result = await run(`
+const source: [string, string | number][] = [["a", 1]];
+const narrowed = source.filter((entry): entry is [string, number] => typeof entry[1] === "number");
+narrowed.forEach(entry => { const alias = entry; const again = alias; again[1] = 7; });
+console.log(source[0]![1]);
+narrowed.forEach(entry => {
+  const alias = entry;
+  source[0]![1] = "changed";
+  try { console.log(alias[1] + 1); } catch (error) { console.log(error instanceof TypeError); }
+});
+`);
+  expect(result.error).toBeUndefined();
+  expect(result.status).toBe(0);
+  expect(result.stdout.toString()).toBe("7\ntrue\n");
+  expect(result.stderr.toString()).toBe("");
+});
+
+test.skipIf(process.platform === "win32")(
+  "destructuring array writes use tuple storage",
+  async () => {
+    const result = await run(`
+const source: [string, unknown][] = [["a", 1]];
+const narrowed = source.filter((entry): entry is [string, number] => typeof entry[1] === "number");
+[narrowed[0]] = [["replacement", 2]];
+console.log(narrowed[0]![0], narrowed[0]![1], source[0]![0]);
+const events: string[] = [];
+function value(): number { events.push("value"); return 3; }
+function index(): number { events.push("index"); return 0; }
+[narrowed[index()]] = [["assigned", value()]];
+console.log(narrowed[0]![1], events.join(","));
+`);
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(0);
+    expect(result.stdout.toString()).toBe("replacement 2 a\n3 value,index\n");
+    expect(result.stderr.toString()).toBe("");
+  },
+);
+
 test.skipIf(process.platform === "win32")(
   "tuple predicates validate reads after an alias changes the field",
   async () => {
@@ -92,6 +131,19 @@ console.log(entries.filter((entry): entry is [string, number[]] => Array.isArray
     `const values = [1, 2]; const predicate: (value: number) => void = value => value;
 console.log(values.filter(predicate).length);`,
   ],
+  ...[
+    "narrowed[0] = replacement;",
+    "[narrowed[0]] = [replacement];",
+    "narrowed.push(replacement);",
+    "function mutate(entry: [string, number]): void { entry[1] = 7; } narrowed.forEach(entry => mutate(entry));",
+    'const assigned = ([narrowed[0]] = [["value", 2]]); console.log(assigned[0]);',
+  ].map((assignment) => [
+    `existing tuple layout conversion (${assignment})`,
+    `const source: [string, unknown][] = [["a", 1]];
+const narrowed = source.filter((entry): entry is [string, number] => true);
+const replacement: [string, number] = ["b", 2];
+${assignment}`,
+  ]),
 ])("%s preserves its unsupported diagnostic", (_name, source) => {
   const dir = mkdtempSync(join(tmpdir(), "scriptc-filter-refused-"));
   try {
