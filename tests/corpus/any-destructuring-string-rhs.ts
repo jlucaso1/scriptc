@@ -5,6 +5,7 @@ const events: any = {
   'a"b': { value: 8 },
   "a\\b": { value: 9 },
   "": { value: 10 },
+  "a\0b": { value: 16 },
 };
 const { value } = events["a.b"];
 console.log(value);
@@ -17,7 +18,8 @@ const { value: quote } = events['a"b'];
 const { value: slash } = events["a\\b"];
 const { value: unicode } = events["\u0061.b"];
 const { value: empty } = events[""];
-console.log(newline, quote, slash, unicode, empty);
+const { value: nul } = events["a\0b"];
+console.log(newline, quote, slash, unicode, empty, nul);
 
 let calls = 0;
 let defaults = 0;
@@ -65,6 +67,8 @@ for (const attempt of [
   () => { const { value } = absentSource["a\\b"]; console.log(value); },
   () => { const { value } = absentSource["\u0061"]; console.log(value); },
   () => { const {} = absentSource[""]; },
+  () => { const { value } = absentSource["a\0b"]; console.log(value); },
+  () => { const {} = absentSource["a\0b"]; },
   () => { ({ value: assigned } = absentSource["a.b"]); },
   () => { const { value } = source()["not.found"]; console.log(value); },
 ]) {

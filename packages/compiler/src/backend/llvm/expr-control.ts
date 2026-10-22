@@ -30,7 +30,12 @@ export function emitControlExpr(
       const v = host.emitExpr(e.value);
       const first = e.firstProp !== undefined ? host.cstr(e.firstProp) : "null";
 
-      const helper = host.dyn.dynDestrCheckHelper();
+      // Embedded NULs need a length-aware spelling writer. Keep the ordinary
+      // helper unchanged for existing source expressions.
+      const spellingLength = e.spelling.includes("\0")
+        ? Buffer.byteLength(e.spelling, "utf8")
+        : undefined;
+      const helper = host.dyn.dynDestrCheckHelper(spellingLength);
       B.line(`call void @${helper}(ptr ${v.name}, ptr ${host.cstr(e.spelling)}, ptr ${first})`);
       host.emitPendingCheck();
       return v;

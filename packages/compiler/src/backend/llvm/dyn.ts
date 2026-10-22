@@ -4128,11 +4128,12 @@ export class LlDyn {
 
   /* ── destructuring RequireObjectCoercible (ported) ─────────────────── */
 
-  dynDestrCheckHelper(): string {
-    const memoKey = "%dynDestrCheck";
+  dynDestrCheckHelper(spellingLength?: number): string {
+    const suffix = spellingLength === undefined ? "" : `_len${spellingLength}`;
+    const memoKey = `%dynDestrCheck${suffix}`;
     const existing = this.dynBuilders.get(memoKey);
     if (existing) return existing;
-    const name = "sc_dyn_destr_check";
+    const name = `sc_dyn_destr_check${suffix}`;
     this.dynBuilders.set(memoKey, name);
     const host = this.host;
     host.declare(`declare void @scr_jb_init(ptr)`);
@@ -4140,6 +4141,14 @@ export class LlDyn {
     host.declare(`declare void @scr_jb_puts(ptr, ptr)`);
     host.declare(`declare void @scr_throw_error(i32, ptr)`);
     const B = new BlockBuilder();
+    const writeSpelling = (): void => {
+      if (spellingLength === undefined) {
+        B.line(`call void @scr_jb_puts(ptr %ddb, ptr %spell)`);
+      } else {
+        host.declare(`declare void @scr_jb_write_utf8(ptr, ptr, ${this.S})`);
+        B.line(`call void @scr_jb_write_utf8(ptr %ddb, ptr %spell, ${this.S} ${spellingLength})`);
+      }
+    };
     const kd = this.kindOf(B, "%d");
     const isU = B.tmp();
     const isN = B.tmp();
@@ -4166,12 +4175,12 @@ export class LlDyn {
     this.puts(B, buf, "Cannot destructure property '");
     B.line(`call void @scr_jb_puts(ptr ${buf}, ptr %firstProp)`);
     this.puts(B, buf, "' of '");
-    B.line(`call void @scr_jb_puts(ptr ${buf}, ptr %spell)`);
+    writeSpelling();
     this.puts(B, buf, "' as it is ");
     B.br(lTail);
     B.startBlock(lBare);
     this.puts(B, buf, "Cannot destructure '");
-    B.line(`call void @scr_jb_puts(ptr ${buf}, ptr %spell)`);
+    writeSpelling();
     this.puts(B, buf, "' as it is ");
     B.br(lTail);
     B.startBlock(lTail);
