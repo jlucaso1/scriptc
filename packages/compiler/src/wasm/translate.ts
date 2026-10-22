@@ -2108,7 +2108,12 @@ class FunctionTranslator {
         integer.kind === "extmul" ||
         integer.kind === "pairwise" ||
         integer.kind === "dot";
-      const inputType = widening ? `<${2 * lanes} x i${integer.bits / 2}>` : type;
+      const inputType =
+        integer.kind === "narrow"
+          ? `<${lanes / 2} x i${2 * integer.bits}>`
+          : widening
+            ? `<${2 * lanes} x i${integer.bits / 2}>`
+            : type;
       const b = vector(pop(), inputType);
       if (widening) {
         const halfType = `<${lanes} x i${integer.bits / 2}>`;
@@ -2139,6 +2144,81 @@ class FunctionTranslator {
             const left = widen(vector(pop(), inputType), start, 1);
             push(this.emit(`mul ${type} ${left}, ${right}`), type);
           }
+        }
+      } else if (integer.kind === "popcnt") {
+        const constant = (value: number): string =>
+          `<${Array.from({ length: lanes }, () => `i8 ${value}`).join(", ")}>`;
+        const shifted = this.emit(`lshr ${type} ${b}, ${constant(1)}`);
+        const pairs = this.emit(`and ${type} ${shifted}, ${constant(0x55)}`);
+        const x = this.emit(`sub ${type} ${b}, ${pairs}`);
+        const low = this.emit(`and ${type} ${x}, ${constant(0x33)}`);
+        const high = this.emit(`lshr ${type} ${x}, ${constant(2)}`);
+        const highBits = this.emit(`and ${type} ${high}, ${constant(0x33)}`);
+        const nibbles = this.emit(`add ${type} ${low}, ${highBits}`);
+        const upper = this.emit(`lshr ${type} ${nibbles}, ${constant(4)}`);
+        const sum = this.emit(`add ${type} ${nibbles}, ${upper}`);
+        push(this.emit(`and ${type} ${sum}, ${constant(15)}`), type);
+      } else if (
+        integer.kind === "saturating" ||
+        integer.kind === "average" ||
+        integer.kind === "narrow"
+      ) {
+        const a = vector(pop(), inputType);
+        const wideBits = 2 * integer.bits;
+        const wideLanes = integer.kind === "narrow" ? lanes / 2 : lanes;
+        const wideType = `<${wideLanes} x i${wideBits}>`;
+        const boolType = `<${wideLanes} x i1>`;
+        const constant = (value: number): string =>
+          value === 0
+            ? "zeroinitializer"
+            : `<${Array.from({ length: wideLanes }, () => `i${wideBits} ${value}`).join(", ")}>`;
+        const signed =
+          integer.operation.endsWith("s") ||
+          integer.operation === "s" ||
+          integer.operation === "q15";
+        const minimum = signed ? -Math.pow(2, integer.bits - 1) : 0;
+        const maximum = signed ? Math.pow(2, integer.bits - 1) - 1 : Math.pow(2, integer.bits) - 1;
+        const clamp = (value: string): string => {
+          const below = this.emit(`icmp slt ${wideType} ${value}, ${constant(minimum)}`);
+          const lower = this.emit(
+            `select ${boolType} ${below}, ${wideType} ${constant(minimum)}, ${wideType} ${value}`,
+          );
+          const above = this.emit(`icmp sgt ${wideType} ${lower}, ${constant(maximum)}`);
+          return this.emit(
+            `select ${boolType} ${above}, ${wideType} ${constant(maximum)}, ${wideType} ${lower}`,
+          );
+        };
+        if (integer.kind === "narrow") {
+          // Both narrow_s and narrow_u interpret the wide source as signed.
+          // The suffix selects the destination's saturation interval only.
+          const halfType = `<${wideLanes} x i${integer.bits}>`;
+          const left = this.emit(`trunc ${wideType} ${clamp(a)} to ${halfType}`);
+          const right = this.emit(`trunc ${wideType} ${clamp(b)} to ${halfType}`);
+          const indices = Array.from({ length: lanes }, (_, i) => `i32 ${i}`).join(", ");
+          push(
+            this.emit(
+              `shufflevector ${halfType} ${left}, ${halfType} ${right}, <${lanes} x i32> <${indices}>`,
+            ),
+            type,
+          );
+        } else {
+          const left = this.emit(`${signed ? "sext" : "zext"} ${type} ${a} to ${wideType}`);
+          const right = this.emit(`${signed ? "sext" : "zext"} ${type} ${b} to ${wideType}`);
+          let result: string;
+          if (integer.operation === "q15") {
+            const product = this.emit(`mul ${wideType} ${left}, ${right}`);
+            const rounded = this.emit(`add ${wideType} ${product}, ${constant(0x4000)}`);
+            result = clamp(this.emit(`ashr ${wideType} ${rounded}, ${constant(15)}`));
+          } else {
+            result = this.emit(
+              `${integer.operation.startsWith("sub") ? "sub" : "add"} ${wideType} ${left}, ${right}`,
+            );
+            if (integer.kind === "average") {
+              const rounded = this.emit(`add ${wideType} ${result}, ${constant(1)}`);
+              result = this.emit(`lshr ${wideType} ${rounded}, ${constant(1)}`);
+            } else result = clamp(result);
+          }
+          push(this.emit(`trunc ${wideType} ${result} to ${type}`), type);
         }
       } else if (integer.kind === "compare") {
         const a = vector(pop(), type);

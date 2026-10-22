@@ -11,7 +11,11 @@ export interface SimdIntegerOp {
     | "extend"
     | "extmul"
     | "pairwise"
-    | "dot";
+    | "dot"
+    | "saturating"
+    | "average"
+    | "narrow"
+    | "popcnt";
   operation: string;
 }
 
@@ -59,5 +63,20 @@ export function simdIntegerOp(sub: number): SimdIntegerOp | null {
   if (sub >= 0x7c && sub <= 0x7f)
     return { bits: sub < 0x7e ? 16 : 32, kind: "pairwise", operation: sub % 2 === 0 ? "s" : "u" };
   if (sub === 0xba) return { bits: 32, kind: "dot", operation: "s" };
+  for (let group = 0; group < 2; group++) {
+    const bits = 8 << group;
+    const add = sub - (0x6f + 0x20 * group);
+    const subtract = sub - (0x72 + 0x20 * group);
+    if (add >= 0 && add < 2)
+      return { bits, kind: "saturating", operation: add === 0 ? "add_s" : "add_u" };
+    if (subtract >= 0 && subtract < 2)
+      return { bits, kind: "saturating", operation: subtract === 0 ? "sub_s" : "sub_u" };
+    if (sub === 0x7b + 0x20 * group) return { bits, kind: "average", operation: "" };
+    const narrow = sub - (0x65 + 0x20 * group);
+    if (narrow >= 0 && narrow < 2)
+      return { bits, kind: "narrow", operation: narrow === 0 ? "s" : "u" };
+  }
+  if (sub === 0x82) return { bits: 16, kind: "saturating", operation: "q15" };
+  if (sub === 0x62) return { bits: 8, kind: "popcnt", operation: "" };
   return null;
 }

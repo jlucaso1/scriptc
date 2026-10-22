@@ -1879,7 +1879,10 @@ class FunctionValidator {
         integer.kind === "compare" ||
         integer.kind === "binary" ||
         integer.kind === "extmul" ||
-        integer.kind === "dot"
+        integer.kind === "dot" ||
+        integer.kind === "saturating" ||
+        integer.kind === "average" ||
+        integer.kind === "narrow"
       )
         this.popExpect(V128);
       this.push(integer.kind === "all-true" || integer.kind === "bitmask" ? I32 : V128);

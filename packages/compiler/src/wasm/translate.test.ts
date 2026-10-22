@@ -346,7 +346,7 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(
       inventory.filter((entry) => entry.translated).map((entry) => Number(entry.opcode)),
     ).toEqual([...exercised].sort((a, b) => a - b));
-    expect(exercised.size).toBe(168);
+    expect(exercised.size).toBe(184);
   });
 
   test.each([0x23, 0xd6, 0x63, 0x64, 0xc3, 0xc4])(
@@ -438,6 +438,22 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(v8Validate(bytes)).toBe(false);
     expect(analyzeWasm(bytes).status).toBe("invalid");
   });
+
+  test.each([0x65, 0x6f, 0x82, 0x9b])(
+    "rejects scalar operands for saturating/narrowing opcode %i",
+    (sub) => {
+      const vector = [253, 12, ...new Array<number>(16).fill(0)];
+      const op = sub < 128 ? [253, sub] : [253, sub, 1];
+      const instructions = [0, ...vector, 65, 0, ...op, 253, 83, 11];
+      const bytes = wasmModule(
+        [1, 1, 96, 0, 1, 127],
+        [3, 1, 0],
+        [10, 1, instructions.length, ...instructions],
+      );
+      expect(v8Validate(bytes)).toBe(false);
+      expect(analyzeWasm(bytes).status).toBe("invalid");
+    },
+  );
 
   test("SIMD stores check the full range even with guard pages", () => {
     const bytes = Buffer.from(simdFixtures.find((f) => f.name === "store-param")!.base64, "base64");
