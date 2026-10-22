@@ -339,8 +339,33 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(
       inventory.filter((entry) => entry.translated).map((entry) => Number(entry.opcode)),
     ).toEqual([...exercised].sort((a, b) => a - b));
-    expect(exercised.size).toBe(52);
+    expect(exercised.size).toBe(96);
   });
+
+  test.each([0x23, 0xd6, 0x63, 0x64, 0xc3, 0xc4])(
+    "rejects scalar operands for integer SIMD opcode %i",
+    (sub) => {
+      const compare = sub === 0x23 || sub === 0xd6;
+      const vector = [253, 12, ...new Array<number>(16).fill(0)];
+      const op = sub < 128 ? [253, sub] : [253, sub, 1];
+      const instructions = [
+        0,
+        ...(compare ? vector : []),
+        65,
+        0,
+        ...op,
+        ...(compare ? [253, 83] : []),
+        11,
+      ];
+      const bytes = wasmModule(
+        [1, 1, 96, 0, 1, 127],
+        [3, 1, 0],
+        [10, 1, instructions.length, ...instructions],
+      );
+      expect(v8Validate(bytes)).toBe(false);
+      expect(analyzeWasm(bytes).status).toBe("invalid");
+    },
+  );
 
   test("SIMD stores check the full range even with guard pages", () => {
     const bytes = Buffer.from(simdFixtures.find((f) => f.name === "store-param")!.base64, "base64");

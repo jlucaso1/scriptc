@@ -56,6 +56,8 @@ import {
   type WasmRange,
 } from "./module.js";
 
+import { simdIntegerOp } from "./simd.js";
+
 /** Trap codes (scr_wasm_abi.h SCR_WASM_TRAP_*). */
 export const TRAP_UNREACHABLE = 1;
 export const TRAP_MEMORY_OOB = 2;
@@ -2092,6 +2094,32 @@ class FunctionTranslator {
         `shufflevector ${type} ${first}, ${type} poison, <${lanes} x i32> zeroinitializer`,
       );
     };
+    const integer = simdIntegerOp(sub);
+    if (integer !== null) {
+      const lanes = 128 / integer.bits;
+      const type = `<${lanes} x i${integer.bits}>`;
+      const maskType = `<${lanes} x i1>`;
+      const b = vector(pop(), type);
+      if (integer.kind === "compare") {
+        const a = vector(pop(), type);
+        const mask = this.emit(`icmp ${integer.operation} ${type} ${a}, ${b}`);
+        // WebAssembly comparisons return all bits set in each true lane.
+        push(this.emit(`sext ${maskType} ${mask} to ${type}`), type);
+      } else {
+        const mask = this.emit(
+          `icmp ${integer.kind === "all-true" ? "ne" : "slt"} ${type} ${b}, zeroinitializer`,
+        );
+        // All supported targets are little-endian: lane zero is bit zero.
+        const packed = this.emit(`bitcast ${maskType} ${mask} to i${lanes}`);
+        const result =
+          integer.kind === "all-true" ? this.emit(`icmp eq i${lanes} ${packed}, -1`) : packed;
+        this.push(
+          this.emit(`zext i${integer.kind === "all-true" ? 1 : lanes} ${result} to i32`),
+          VAL_I32,
+        );
+      }
+      return;
+    }
     if (sub <= 11 || (sub >= 84 && sub <= 93)) {
       const offset = this.memargOffset(c);
       const laneOp = sub >= 84 && sub <= 91;

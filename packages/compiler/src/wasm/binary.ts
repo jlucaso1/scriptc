@@ -25,6 +25,7 @@
  * the counts and the feature set it reports. It is plain TypeScript that
  * the native compiler also compiles. */
 import { readMemargFlags } from "./module.js";
+import { simdIntegerOp } from "./simd.js";
 
 /** Proposals the summary can name, in report order. The first group is the
  * translatable set; the rest are reported as unsupported. */
@@ -409,7 +410,7 @@ class ModuleDecoder {
   sawCode = false;
   /** A type definition outside the function-type subset stopped typing. */
   gcTypes = false;
-  /** SIMD data movement and bitwise operations are translated; arithmetic is not yet. */
+  /** A SIMD instruction or value use outside the implemented subset was found. */
   unsupportedSimd = false;
 
   constructor(bytes: Uint8Array) {
@@ -1872,6 +1873,13 @@ class FunctionValidator {
     this.m.feature("simd");
     const start = r.pos;
     const sub = r.u32();
+    const integer = simdIntegerOp(sub);
+    if (integer !== null) {
+      this.popExpect(V128);
+      if (integer.kind === "compare") this.popExpect(V128);
+      this.push(integer.kind === "compare" ? V128 : I32);
+      return;
+    }
     if (sub > 34 && (sub < 77 || sub > 93)) {
       this.m.unsupportedSimd = true;
       this.typed = false;
