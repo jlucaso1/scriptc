@@ -1,3 +1,4 @@
+import { analyzeFilterViews, filterTupleConversionCopies } from "./filter-views.js";
 import { relieveHeapPressure } from "../../heap-pressure.js";
 import { onlyForwarded, stripTypeWrappers } from "./typed-arguments.js";
 import {
@@ -2271,6 +2272,10 @@ export class Lowerer {
    * prepass. This includes explicit annotations: unchecked TS annotations do
    * not prove that an array property read produced a value. */
   readonly runtimeOptionalBindingTypes = new Map<ts.Symbol, IrType>();
+  /** Filter tuple refinements keep their source layout across bindings and calls. */
+  readonly filterViewBindings = new Map<ts.Symbol, IrType>();
+  readonly filterViewCalls = new Map<ts.CallExpression, IrType>();
+  readonly filterViewFunctionReturns = new Map<ts.Node, IrType>();
   /** A pipeline() function stage's `source` parameter: the IR type of what
    * the pipeline passes it (the previous stage as an async iterable), set
    * while the stage lowers. Parameter typing and `for await` heads read
@@ -2344,7 +2349,8 @@ export class Lowerer {
       ? this.resolveValueSymbol(node)
       : this.checker.getSymbolAtLocation(node);
     if (!symbol) return fallback ?? null;
-    const known = this.runtimeOptionalBindingTypes.get(symbol);
+    const known =
+      this.filterViewBindings.get(symbol) ?? this.runtimeOptionalBindingTypes.get(symbol);
     if (known) {
       const global = this.globalsBySymbol.get(symbol);
       return global ? tdzStorage(global, known) : known;
@@ -2654,7 +2660,11 @@ export class Lowerer {
   }
 
   runtimeOptionalFunctionReturnType(node: ts.Node, fallback: IrType): IrType {
-    return this.runtimeOptionalFunctionReturns.get(node) ?? fallback;
+    return (
+      this.filterViewFunctionReturns.get(node) ??
+      this.runtimeOptionalFunctionReturns.get(node) ??
+      fallback
+    );
   }
 
   /** True when `actual` is `declared` with some record fields (directly,
@@ -7288,6 +7298,7 @@ export class Lowerer {
       this.analyzeRuntimeOptionalArrayReads(parts);
       this.analyzeDateJsonResults(parts);
       this.analyzeGuardedRecordReadGlobals(parts);
+      analyzeFilterViews(this, parts);
     });
     // Decorated classes analyze AFTER the whole collection pass: a
     // decorator's return type may name a subclass declared below the
@@ -7706,6 +7717,7 @@ export class Lowerer {
       this.analyzeRuntimeOptionalArrayReads(parts);
       this.analyzeDateJsonResults(parts);
       this.analyzeGuardedRecordReadGlobals(parts);
+      analyzeFilterViews(this, parts);
     });
     // Decorated classes analyze post-collection here too: the %init seeds
     // lower the decoration calls, whose edges (decorator bodies, construct
@@ -9212,6 +9224,16 @@ export class Lowerer {
    * else (including a DIFFERENT union) is left for requireExactShape, which
    * rejects union mismatches with SC2003. */
   coerceToExpected(expr: IrExpr, expected: IrType): IrExpr {
+    if (this.filterViewCalls.size > 0 && filterTupleConversionCopies(this, expr.type, expected)) {
+      this.pushDiag(
+        unsupportedDiag(
+          "SC1090",
+          expr.loc,
+          "converting a retained tuple to a different storage layout (keep its stored layout or construct a fresh tuple literal at the destination)",
+        ),
+      );
+      throw new PoisonError();
+    }
     // A comma expression ending in a unit literal (`return log(), null`):
     // its effects run first, unchanged, and the unit value takes the
     // destination's representation (a bare unit literal has none).
@@ -10350,6 +10372,12 @@ export class Lowerer {
     if (expected?.kind === "record") {
       let x = node;
       while (ts.isParenthesizedExpression(x)) x = x.expression;
+      if (
+        this.filterViewCalls.size > 0 &&
+        ts.isArrayLiteralExpression(x) &&
+        this.shapes.get(expected.shapeId)?.tuple
+      )
+        return this.coerceInto(node, this.lowerArrayLiteral(x, expected), expected);
       if (ts.isObjectLiteralExpression(x)) {
         return this.coerceInto(node, this.lowerObjectLiteral(x, expected), expected);
       }

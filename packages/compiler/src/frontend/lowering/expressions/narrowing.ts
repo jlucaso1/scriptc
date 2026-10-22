@@ -1,3 +1,4 @@
+import { filterTupleView } from "../filter-views.js";
 /* Type narrowing of lowered values, conditional and as-expressions, and runtime-optional receiver reads. */
 import * as ts from "../../ts7/adapter.js";
 import { type Lowerer, dynFallbackType } from "../lowerer.js";
@@ -846,7 +847,23 @@ function checkedStaleArm(
   narrowed: IrType = arm,
 ): IrExpr | null {
   if (value.type.kind !== "union" || tag < 0) return null;
-  if (!lowerer.narrowing.untrusted(node, narrowed)) return null;
+  const receiver =
+    (ts.isElementAccessExpression(node) || ts.isPropertyAccessExpression(node)) &&
+    value.kind === "recordGet" &&
+    value.obj.type.kind === "record"
+      ? lowerer.mapTypeOf(lowerer.typeOf(node.expression))
+      : null;
+  const tupleView =
+    receiver?.kind === "record" &&
+    value.kind === "recordGet" &&
+    !typeEquals(value.obj.type, receiver) &&
+    filterTupleView(lowerer, value.obj.type, receiver);
+  if (!tupleView && !lowerer.narrowing.untrusted(node, narrowed)) return null;
+  if (tupleView) {
+    let parent = node.parent;
+    while (parent && ts.isParenthesizedExpression(parent)) parent = parent.parent;
+    if (parent && ts.isTypeOfExpression(parent)) return value;
+  }
   const inPlace = checkedArmExtraction(lowerer, value, tag, arm, (found) =>
     staleReadMessage(node, found),
   );

@@ -1926,14 +1926,15 @@ export function lowerElementWrite(lowerer: Lowerer, expr: ts.BinaryExpression): 
           "tuple indexing with a non-literal index (tuples are fixed-shape — use t[0], t[1], ...)",
         );
       }
-      const fieldType = shape.fields.find((f) => f.name === String(idx))?.type;
-      if (fieldType === undefined) lowerer.badType(target, lowerer.typeOf(target));
       const obj = lowerer.lowerExpr(target.expression);
+      const stored = obj.type.kind === "record" ? lowerer.shapes.get(obj.type.shapeId) : shape;
+      const fieldType = stored?.fields.find((f) => f.name === String(idx))?.type;
+      if (fieldType === undefined) lowerer.badType(target, lowerer.typeOf(target));
       const value = lowerer.lowerExprExpecting(expr.right, fieldType);
       return {
         kind: "recordSet",
         obj,
-        shapeId: receiverIr.shapeId,
+        shapeId: obj.type.kind === "record" ? obj.type.shapeId : receiverIr.shapeId,
         field: String(idx),
         value,
         loc: locOf(expr),

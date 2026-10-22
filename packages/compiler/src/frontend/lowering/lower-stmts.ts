@@ -1,4 +1,5 @@
 import { lowerTupleAliasDecl, stripTypeWrappers } from "./typed-arguments.js";
+import { filterTupleView } from "./filter-views.js";
 import { declaredMemberOf, isPromisePrototypeRead } from "./expressions/property-access.js";
 import { hostsAll } from "./expressions/hosted-narrowing.js";
 import { requestGeneralStreamSurface } from "./general-streams.js";
@@ -5867,6 +5868,18 @@ function inferredOptionalRecordType(
   declared: IrType,
   actual: IrType,
 ): IrType {
+  const viewSymbol = ts.isIdentifier(decl.name) ? lowerer.resolveValueSymbol(decl.name) : null;
+  const view = viewSymbol ? lowerer.filterViewBindings.get(viewSymbol) : null;
+  if (view && typeEquals(view, actual)) return actual;
+  // Callback parameters acquire their stored layout during lowering, after
+  // the filter prepass. Their local aliases must keep that same tuple; the
+  // refined checker type only selects checked reads of its scalar fields.
+  if (
+    lowerer.filterViewCalls.size > 0 &&
+    (actual.kind === "record" || actual.kind === "array") &&
+    filterTupleView(lowerer, actual, declared)
+  )
+    return actual;
   if (decl.type || hasJsTypeAnnotation(decl)) return declared;
   const symbol = ts.isIdentifier(decl.name) ? lowerer.resolveValueSymbol(decl.name) : undefined;
   if (symbol && lowerer.runtimeOptionalRecordsKeptDeclared.has(symbol)) return declared;
@@ -8292,7 +8305,53 @@ export function lowerDestructuringAssignParts(
   } else {
     lowerer.fenceFetchObjectAssignment(target, rhs);
   }
-  return destructuringAssignInto(lowerer, target, lowerer.lowerExpr(rhs), rhs, rhs, loc);
+  let expected: IrType | undefined;
+  if (
+    lowerer.filterViewCalls.size > 0 &&
+    ts.isArrayLiteralExpression(target) &&
+    ts.isArrayLiteralExpression(rhs) &&
+    target.elements.nodes.length === rhs.elements.nodes.length &&
+    rhs.elements.nodes.length > 0 &&
+    rhs.elements.nodes.every(ts.isArrayLiteralExpression)
+  ) {
+    // Context fresh tuples with the array's actual element layout before
+    // constructing the RHS. A value-consuming assignment also exposes the
+    // RHS's fixed outer tuple layout, which this array representation
+    // cannot preserve. Keep that conversion refused instead of copying.
+    let element: IrType | null = null;
+    for (const item of target.elements.nodes) {
+      if (!ts.isElementAccessExpression(item) || !ts.isIdentifier(item.expression)) {
+        element = null;
+        break;
+      }
+      const stored = lowerer.resolveWritable(item.expression)?.type;
+      const view = lowerer.mapTypeOf(lowerer.typeOf(item.expression));
+      if (
+        stored?.kind !== "array" ||
+        view?.kind !== "array" ||
+        typeEquals(stored.elem, view.elem) ||
+        !filterTupleView(lowerer, stored.elem, view.elem) ||
+        (element && !typeEquals(element, stored.elem))
+      ) {
+        element = null;
+        break;
+      }
+      element = stored.elem;
+    }
+    if (element) {
+      let consumer = target.parent?.parent;
+      while (consumer && ts.isParenthesizedExpression(consumer)) consumer = consumer.parent;
+      if (!consumer || !ts.isExpressionStatement(consumer))
+        lowerer.unsupported(
+          "SC1090",
+          rhs,
+          "using the value of a destructuring assignment that changes filtered tuple storage",
+        );
+      expected = arrayOf(element);
+    }
+  }
+  const init = expected ? lowerer.lowerExprExpecting(rhs, expected) : lowerer.lowerExpr(rhs);
+  return destructuringAssignInto(lowerer, target, init, rhs, rhs, loc);
 }
 
 /** The shared assignment-destructuring core: `init` is the once-lowered
@@ -8924,7 +8983,7 @@ function lowerAssignTargetInto(
         }
         const idx = lowerer.declareHiddenLocal("%dtIdx", F64);
         out.push({ kind: "varDecl", localId: idx.id, init: index, loc });
-        const value = valueOf(recvT.elem);
+        const value = valueOf(arr.type.elem);
         const stored = lowerer.declareHiddenLocal("%dtValue", value.type);
         out.push({ kind: "varDecl", localId: stored.id, init: value, loc });
         out.push(
@@ -8933,7 +8992,7 @@ function lowerAssignTargetInto(
             varRef(recv.id, arr.type, loc),
             varRef(idx.id, F64, loc),
             varRef(stored.id, value.type, loc),
-            recvT.elem,
+            arr.type.elem,
             loc,
           ),
         );
@@ -8977,12 +9036,17 @@ function lowerAssignTargetInto(
         if (obj.type.kind === "record") {
           const recv = lowerer.declareHiddenLocal("%dtRecv", obj.type);
           out.push({ kind: "varDecl", localId: recv.id, init: obj, loc });
-          const value = lowerer.coerceInto(blame, valueOf(field.type), field.type);
+          const stored = lowerer.shapes
+            .get(obj.type.shapeId)
+            ?.fields.find((f) => f.name === field.name);
+          if (!stored)
+            lowerer.unsupported("SC1031", t, "destructuring assignment to an absent stored field");
+          const value = lowerer.coerceInto(blame, valueOf(stored.type), stored.type);
           out.push({
             kind: "recordSet",
             obj: { kind: "varRef", localId: recv.id, type: obj.type, loc },
-            shapeId: recvT.shapeId,
-            field: field.name,
+            shapeId: obj.type.shapeId,
+            field: stored.name,
             value,
             loc,
           });
