@@ -139,3 +139,29 @@ narrowed[0]![1]++;`,
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test.each([false, true])(
+  "storage probes preserve deferred diagnostics (reached: %s)",
+  (reached) => {
+    const dir = mkdtempSync(join(tmpdir(), "scriptc-filter-deferred-"));
+    try {
+      const entry = join(dir, "main.ts");
+      writeFileSync(
+        entry,
+        `interface Outer { dyn: { value: WeakRef<object> } }
+function unsupported(value: Outer): Outer { return value; }
+function unused(value: Outer): Outer { return unsupported(value); }
+const entries: [string, unknown][] = [["a", 1]];
+console.log(entries.filter((entry): entry is [string, number] => typeof entry[1] === "number")[0]![1]);
+${reached ? "console.log(unsupported);" : ""}`,
+      );
+      const { coverage } = analyze(entry, {});
+      expect(coverage.preflightFailed, JSON.stringify(coverage.diagnostics)).toBe(false);
+      if (reached)
+        expect(coverage.diagnostics).toContainEqual(expect.objectContaining({ code: "SC2009" }));
+      else expect(coverage.diagnostics).toEqual([]);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  },
+);

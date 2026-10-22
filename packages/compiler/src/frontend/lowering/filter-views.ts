@@ -50,6 +50,56 @@ export function filterTupleView(lowerer: Lowerer, stored: IrType, view: IrType):
  * types; globals, captures and callbacks must agree on the stored layout. */
 export function analyzeFilterViews(lowerer: Lowerer, parts: FileParts[]): void {
   if (!parts.some((part) => part.sf.text.includes("filter"))) return;
+  // Avoid mapping unrelated function and variable types speculatively. Only
+  // tuple-refining filter calls can introduce storage views into this graph.
+  let hasTupleRefinement = false;
+  const callKinds = new Set([ts.SyntaxKind.CallExpression]);
+  for (const part of parts) {
+    ts.walkPreorder(
+      part.sf,
+      (node) => {
+        if (
+          hasTupleRefinement ||
+          !ts.isCallExpression(node) ||
+          !ts.isPropertyAccessExpression(node.expression) ||
+          node.expression.name.text !== "filter" ||
+          node.arguments.nodes.length !== 1 ||
+          !lowerer.isStdlibMember(node.expression)
+        )
+          return;
+        const callback = node.arguments.nodes[0]!;
+        if ((ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && !callback.type)
+          return;
+        const result = lowerer.typeOf(node);
+        const source = lowerer.typeOf(node.expression.expression);
+        if (!lowerer.checker.isArrayType(result) || !lowerer.checker.isArrayType(source)) return;
+        const resultElement = lowerer.checker.getTypeArguments(result as ts.TypeReference)[0];
+        const sourceElement = lowerer.checker.getTypeArguments(source as ts.TypeReference)[0];
+        if (
+          resultElement &&
+          lowerer.checker.isTupleType(resultElement) &&
+          resultElement.id !== sourceElement?.id
+        ) {
+          hasTupleRefinement = true;
+          return "stop";
+        }
+      },
+      callKinds,
+    );
+    if (hasTupleRefinement) break;
+  }
+  if (!hasTupleRefinement) return;
+  const resolve = (identifier: ts.Identifier): ts.Symbol | null => {
+    // This is a storage probe, not a runtime read. Leave deferred errors
+    // on unreachable declarations for ordinary reference lowering to flush.
+    const wasCollecting = lowerer.collecting;
+    lowerer.collecting = true;
+    try {
+      return lowerer.resolveValueSymbol(identifier);
+    } finally {
+      lowerer.collecting = wasCollecting;
+    }
+  };
   const declarations: ts.VariableDeclaration[] = [];
   const functions: ts.FunctionDeclaration[] = [];
   for (const part of parts) {
@@ -122,7 +172,7 @@ export function analyzeFilterViews(lowerer: Lowerer, parts: FileParts[]): void {
       return { ...declared, ret: result };
     }
     if (ts.isIdentifier(node)) {
-      const symbol = lowerer.resolveValueSymbol(node);
+      const symbol = resolve(node);
       if (!symbol || active.has(symbol)) return null;
       const known = lowerer.filterViewBindings.get(symbol);
       if (known) return known;
@@ -143,7 +193,7 @@ export function analyzeFilterViews(lowerer: Lowerer, parts: FileParts[]): void {
       return null;
     }
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)) {
-      const symbol = lowerer.resolveValueSymbol(node.expression);
+      const symbol = resolve(node.expression);
       const declaration = symbol?.declarations.find(
         (candidate) => ts.isFunctionDeclaration(candidate) && candidate.body !== undefined,
       );
@@ -257,8 +307,12 @@ export function analyzeFilterViews(lowerer: Lowerer, parts: FileParts[]): void {
   // Calls consumed immediately have no binding from which to discover the
   // view. Visit them too, without lowering the receiver or callback twice.
   for (const part of parts) {
-    ts.walkPreorder(part.sf, (node) => {
-      if (ts.isCallExpression(node)) storage(node);
-    });
+    ts.walkPreorder(
+      part.sf,
+      (node) => {
+        if (ts.isCallExpression(node)) storage(node);
+      },
+      callKinds,
+    );
   }
 }
