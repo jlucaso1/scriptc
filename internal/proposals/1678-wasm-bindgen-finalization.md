@@ -1,6 +1,6 @@
 # wasm-bindgen ownership and finalization
 
-Proposal for [#1678](https://github.com/vercel-labs/scriptc/issues/1678). This does not implement native `FinalizationRegistry` or resolve the issue. Preserve the existing SC2020 diagnostic and JavaScript runtime fence until the ownership boundary below is implemented and tested.
+Partial compatibility work for [#1678](https://github.com/vercel-labs/scriptc/issues/1678), stacked on the existing Node-island infrastructure. The byte-array adapter and executable integration test implement the narrow Node-owned boundary described below. They do not implement native `FinalizationRegistry` or resolve full client compatibility; preserve the native SC2020 diagnostic and JavaScript runtime fence.
 
 ## Reproduction and current scope
 
@@ -41,7 +41,7 @@ Keep the wasm-bindgen module, its WASM instance, wrappers, registry tokens, and 
 This builds on existing work rather than adding a second JavaScript runtime path:
 
 - [#1685](https://github.com/vercel-labs/scriptc/pull/1685) loads libnode and enters calls through a Node callback scope. It remains open as of this investigation.
-- [#1686](https://github.com/vercel-labs/scriptc/pull/1686) adds `@scriptc/node` calls with a JSON-copy boundary. It was merged into `ni/1-libnode-loader`, not main. Its API is not available in the base checkout for this proposal.
+- [#1686](https://github.com/vercel-labs/scriptc/pull/1686) adds `@scriptc/node` calls with a JSON-copy boundary. It was merged into `ni/1-libnode-loader`, not main. Its API is not available on the main commit originally investigated; it is available in this internal PR's explicit stacked review base.
 - [#1684](https://github.com/vercel-labs/scriptc/pull/1684) supplies pinned libnode packs, and [#1696](https://github.com/vercel-labs/scriptc/pull/1696) integrates Node's event loop. Both remain open.
 - [#1691](https://github.com/vercel-labs/scriptc/pull/1691) detects would-be islands in report-only mode. It does not make an ordinary package import execute in Node.
 
@@ -51,15 +51,24 @@ A narrow SHA256 adapter can accept an array of input bytes, validate each intege
 
 Do not silently rewrite the import, hide SC2020, or claim that configuration flags already enable an executable island. If explicit native ownership is desired instead, require an opt-in binding API with a complete disposal proof for every owned wrapper and closure. A successful hash call is insufficient evidence for that proof.
 
-## Acceptance work
+## Implemented partial path
 
-1. Land the existing island loader/API and validate against the pinned libnode pack. Keep this issue open until the reduced consumer passes as a compiled executable.
-2. Add a reduced wasm-bindgen module that constructs a registry before creating a minimal WASM instance. Verify initialization through the explicit island adapter. Cover module initialization failure and repeated calls, and ensure no native registry lowering is introduced.
-3. Test constructor and registration validation, shared unregister tokens, unknown and repeated unregister, target-as-token, explicit disposal, and disposal after an exception. Check resource counters for explicit release and no second release after unregister. Use Node as the oracle.
-4. Exercise actual collector-driven cleanup separately in an isolated Node process with resource counters. Report observations and limits; never require finalization before a fixed timeout or at process exit. Check callbacks run outside a collector/destructor stack, preserve held state, and cannot resurrect a freed native address.
-5. Run the exact published consumer import and reduced SHA256 adapter under the compiled island path. Keep network connections and full client creation out of this smoke test. Add stateful lifecycle evidence before making any broader claim.
-6. Run the plain and sanitized project lanes, relevant island ordering/liveness tests, cache-hit and pack-version checks, and the zero-cost gate for island-free code. Exercise leak and double-free detection on explicit resource lifecycles; sanitizers do not prove V8 finalizer timing or complete Rust ownership.
+`examples/wasm-bindgen-node` provides an ESM adapter for the exact published consumer. The adapter accepts byte arrays, validates every element, calls SHA256 in Node, and returns a copied digest array. It honors the package's import-only export rather than bypassing its public entry.
+
+`tests/harness/wasm-bindgen-node-island.test.ts` compares a compiled native caller against Node. The reduced ownership fixture keeps real registries, class wrappers, mutable closures, tokens, and a counted WASM allocator entirely in Node. It checks explicit release after successful and throwing operations, concurrent async calls interleaved with sync calls, module-initialization failure/retry, shared tokens, invalid registration, and refusal of native callbacks, class handles, and typed arrays at the JSON boundary. The real-consumer check is opt-in and fails if its requested installation is missing. Neither test claims eventual finalization or Rust leak freedom.
+
+The internal PR is based on a snapshot of upstream hosted-loop commit `eaefbdf44`, so its diff contains only this issue's adapter, tests, fixtures, and investigation. The upstream infrastructure remains a prerequisite rather than being copied into the patch.
+
+## Remaining acceptance work
+
+1. Land and validate the existing Node-island infrastructure. This internal PR depends on it; it does not duplicate that implementation or make it available on main.
+2. Validate a real stateful consumer with destructor-level evidence or an enabled Rust memory profiler. The counted WASM fixture proves its own class/closure ownership pattern, not ownership of every Rust resource in the published client.
+3. Exercise collector-driven cleanup separately without requiring a callback count, deadline, or shutdown callback. The explicit-disposal checks intentionally make no finalizer scheduling claim.
+4. Complete the plain and sanitized project gates on the stacked revision. Review existing upstream-stack failures separately from changes introduced here. Preserve native callback and non-JSON handle refusals until their own boundary contract exists.
+5. Treat native FinalizationRegistry as a separate language/collector proposal. Define cleanup-job roots, safe callback context, immortal/region-owned targets, token identities, and worker ownership before removing the fence.
 
 ## Evidence and limits
 
-The investigation used an isolated branch/worktree and inspected the issue, current main, duplicate PR search, the PRs above, their available reviews, the native weak-disposal hooks, and the ProgramLifetime contract. No native runtime or diagnostic behavior was changed. The added refusal tests and the existing compiler weak-collection ownership-policy test pass, 4/4, in both plain and `SCRIPTC_SAN=1` configurations on Node 24.22.0. These frontend-only tests run without a native build and do not exercise ASan or native resource cleanup. Lint, formatting, and whitespace checks pass. No full native or sanitizer suite result is claimed for an unimplemented feature. The reduced Node 24.22.0 lifecycle experiment covers shared-token unregister, invalid operands, minimal WASM initialization, and explicit disposal without forcing GC. Experimental scripts and the downloaded package stay outside the PR.
+The investigation used isolated branches/worktrees and inspected the issue, main, duplicate PR search, the PRs above, their available reviews, native weak-disposal hooks, and ProgramLifetime. Native runtime and diagnostic behavior are unchanged. The initial main-based refusal and ownership-policy tests passed 4/4 in both configurations. The stacked focused run passed 12/12 tests in plain and sanitizer configurations, covering release and dev builds: three native registry refusals, the compiler ownership policy, four JSON boundary refusals, counted WASM ownership in both optimization modes, and the installed published consumer in both modes. The sanitizer run enabled ASan and the runtime reference-count audit. The plain run used the matching prebuilt runtime artifact from upstream CI run 39671135375; its native-package build passed although the overall upstream run failed other tests. The example also built and ran through the CLI with `--libnode=beside`. The host run preserved ASan's documented fiber warning; it did not disable leak detection or change host security settings. The sandbox could not perform LeakSanitizer's process inspection, so the native tests ran on the authorized host.
+
+The compiler/oracle uses Node 24.22.0; the hosted-loop branch's checksum-pinned development pack is libnode 24.22.1. The small differential checks are not a same-version full parity claim. The consumer's allocation profiler is disabled, and its zero counters are not leak evidence. No native FinalizationRegistry implementation, full client lifecycle, or Baileyrs compatibility is claimed. Downloaded npm packages, native packs, and experimental artifacts stay outside the PR.

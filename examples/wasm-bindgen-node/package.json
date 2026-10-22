@@ -1,0 +1,7 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@oxidezap/whatsapp-rust-bridge": "0.26.0"
+  }
+}
