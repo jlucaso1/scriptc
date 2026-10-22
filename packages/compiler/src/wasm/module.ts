@@ -16,6 +16,7 @@ export const VAL_I32 = 0x7f;
 export const VAL_I64 = 0x7e;
 export const VAL_F32 = 0x7d;
 export const VAL_F64 = 0x7c;
+export const VAL_V128 = 0x7b;
 export const VAL_FUNCREF = 0x70;
 export const VAL_EXTERNREF = 0x6f;
 
@@ -249,6 +250,7 @@ export class WasmCursor {
       b === VAL_I64 ||
       b === VAL_F32 ||
       b === VAL_F64 ||
+      b === VAL_V128 ||
       b === VAL_FUNCREF ||
       b === VAL_EXTERNREF
     ) {
@@ -355,6 +357,17 @@ export function skipImmediates(c: WasmCursor, op: number): void {
     case 0xd0:
       c.valType();
       return;
+    case 0xfd: {
+      const sub = c.u32();
+      if (sub <= 11 || (sub >= 84 && sub <= 93)) {
+        const flags = readMemargFlags(() => c.u32());
+        if (flags.align < 0 || flags.memory !== 0) throw new Error("wasm: unsupported SIMD memory");
+        c.u32();
+        if (sub >= 84 && sub <= 91) c.u8();
+      } else if (sub === 12 || sub === 13) c.pos += 16;
+      else if (sub >= 21 && sub <= 34) c.u8();
+      return;
+    }
     case 0xfc: {
       const sub = c.u32();
       switch (sub) {

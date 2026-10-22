@@ -3,13 +3,18 @@ import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { analyzeWasm } from "./binary.js";
 import { decodeBase64, encodeBase64 } from "./base64.js";
-import { WasmCursor, parseWasmModule } from "./module.js";
+import { WasmCursor, parseWasmModule, skipImmediates } from "./module.js";
 import {
   signatureHash,
   stackCheckedFunctions,
   translateWasmModule,
   wasmSymbolPrefix,
 } from "./translate.js";
+
+const v8Validate = (bytes: Uint8Array): boolean =>
+  (
+    globalThis as unknown as { WebAssembly: { validate(bytes: Uint8Array): boolean } }
+  ).WebAssembly.validate(bytes);
 
 const SHA = new Uint8Array(32).fill(0xab);
 
@@ -243,5 +248,149 @@ describe("helpers", () => {
     expect(decodeBase64(encodeBase64(ADD))).toEqual(ADD);
     expect(encodeBase64(new Uint8Array([1]))).toBe("AQ==");
     expect(encodeBase64(new Uint8Array([1, 2]))).toBe("AQI=");
+  });
+});
+
+const simdFixtures: { name: string; base64: string; width: number }[] = JSON.parse(
+  readFileSync(
+    new URL("../../../../tests/wasm-spec/corpus/simd-data.json", import.meta.url),
+    "utf8",
+  ),
+);
+
+describe("SIMD data movement and bitwise subset", () => {
+  test.each(simdFixtures)(
+    "validates and translates $name with either bounds policy",
+    ({ base64 }) => {
+      const bytes = new Uint8Array(Buffer.from(base64, "base64"));
+      expect(v8Validate(bytes)).toBe(true);
+      expect(analyzeWasm(bytes).status).toBe("valid");
+      for (const boundsChecks of [false, true]) {
+        const out = translateWasmModule(bytes, SHA, { boundsChecks });
+        expect(out.text.join("\n")).toContain("define internal");
+        for (const line of topLevelLines(out.text)) {
+          expect(
+            line === "" || /^(define internal |@[\w.$-]+ = (private|internal) )/.test(line),
+            line,
+          ).toBe(true);
+        }
+      }
+    },
+  );
+
+  test("keeps arithmetic, relaxed SIMD and the vector ABI outside the supported subset", () => {
+    const bytes = Buffer.from(simdFixtures.find((f) => f.name === "bitwise-78")!.base64, "base64");
+    const opcode = bytes.indexOf(Buffer.from([253, 78]));
+    bytes[opcode + 1] = 110; // i8x16.add has the same stack effect as v128.and.
+    expect(v8Validate(bytes)).toBe(true);
+    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
+    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 110");
+    const abi = Buffer.from(
+      "AGFzbQEAAAABBQFgAAF7AwIBAAoWA RQA/QwAAAAAAAAAAAAAAAAAAAAACw==".replaceAll(" ", ""),
+      "base64",
+    );
+    expect(v8Validate(abi)).toBe(true);
+    expect(analyzeWasm(abi).unsupported).toEqual(["simd"]);
+    expect(() => translateWasmModule(abi, SHA, { boundsChecks: true })).toThrow(
+      "v128 function signatures",
+    );
+  });
+
+  test.each([
+    ["extract-21", [253, 21, 2], 2, 16],
+    ["replace-34", [253, 34, 1], 2, 2],
+    ["shuffle", [253, 13, 31], 2, 32],
+    ["memory-0", [253, 0, 0, 0], 2, 5],
+    ["lane-memory-87", [253, 87, 0, 0, 1], 4, 2],
+  ])("rejects invalid SIMD immediates in %s", (name, needle, delta, replacement) => {
+    const bytes = Buffer.from(simdFixtures.find((f) => f.name === name)!.base64, "base64");
+    const offset = bytes.indexOf(Buffer.from(needle));
+    expect(offset).toBeGreaterThan(0);
+    bytes[offset + delta] = replacement;
+    expect(v8Validate(bytes)).toBe(false);
+    expect(analyzeWasm(bytes).status).toBe("invalid");
+  });
+
+  test("the opcode inventory matches the implemented and exercised subset", () => {
+    const inventory: { opcode: string; translated: boolean }[] = JSON.parse(
+      readFileSync(
+        new URL("../../../../internal/compatibility/wasm-simd-opcodes.json", import.meta.url),
+        "utf8",
+      ),
+    );
+    expect(inventory).toHaveLength(236);
+    expect(new Set(inventory.map((entry) => entry.opcode)).size).toBe(236);
+    const exercised = new Set<number>();
+    for (const fixture of simdFixtures) {
+      const m = parseWasmModule(Buffer.from(fixture.base64, "base64"));
+      for (const code of m.codes) {
+        const c = new WasmCursor(m.bytes, code.body.start);
+        while (c.pos < code.body.end) {
+          const op = c.u8();
+          const pos = c.pos;
+          if (op === 0xfd) {
+            exercised.add(c.u32());
+            c.pos = pos;
+          }
+          skipImmediates(c, op);
+        }
+      }
+    }
+    expect(
+      inventory.filter((entry) => entry.translated).map((entry) => Number(entry.opcode)),
+    ).toEqual([...exercised].sort((a, b) => a - b));
+    expect(exercised.size).toBe(52);
+  });
+
+  test("relaxed SIMD keeps its unsupported status", () => {
+    const instructions = [
+      0,
+      253,
+      12,
+      ...new Array<number>(16).fill(0),
+      253,
+      12,
+      ...new Array<number>(16).fill(0),
+      253,
+      128,
+      2,
+      253,
+      83,
+      11,
+    ];
+    const bytes = wasmModule(
+      [1, 1, 96, 0, 1, 127],
+      [3, 1, 0],
+      [10, 1, instructions.length, ...instructions],
+    );
+    expect(v8Validate(bytes)).toBe(true);
+    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
+    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 256");
+  });
+
+  test("seeded mutations never admit a SIMD module V8 rejects", () => {
+    let state = 0x1679;
+    const random = (n: number): number => {
+      state ^= state << 13;
+      state ^= state >>> 17;
+      state ^= state << 5;
+      return (state >>> 0) % n;
+    };
+    for (let i = 0; i < 4000; i++) {
+      const bytes = Buffer.from(simdFixtures[random(simdFixtures.length)]!.base64, "base64");
+      const offset = random(bytes.length);
+      bytes[offset] = random(256);
+      const summary = analyzeWasm(bytes);
+      if (summary.status === "unsupported") continue;
+      expect(summary.status === "valid", `mutation ${i}: ${summary.error}`).toBe(v8Validate(bytes));
+    }
+  });
+
+  test("a SIMD instruction does not hide a subsequent scalar type error", () => {
+    const bytes = Buffer.from(simdFixtures.find((f) => f.name === "const")!.base64, "base64");
+    const store = bytes.indexOf(Buffer.from([253, 11, 0, 0]));
+    bytes[store + 4] = 66; // i64.const replaces the i32 function result.
+    expect(v8Validate(bytes)).toBe(false);
+    expect(analyzeWasm(bytes).status).toBe("invalid");
   });
 });

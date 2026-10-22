@@ -46,6 +46,7 @@ import {
   VAL_FUNCREF,
   VAL_I32,
   VAL_I64,
+  VAL_V128,
   WasmCursor,
   parseWasmModule,
   readMemargFlags,
@@ -124,6 +125,8 @@ const RUNTIME_DECLS = [
 
 function llType(t: number): string {
   switch (t) {
+    case VAL_V128:
+      return "<16 x i8>";
     case VAL_I32:
       return "i32";
     case VAL_I64:
@@ -142,6 +145,8 @@ function llType(t: number): string {
 
 function zeroOf(t: number): string {
   switch (t) {
+    case VAL_V128:
+      return "zeroinitializer";
     case VAL_I32:
     case VAL_I64:
       return "0";
@@ -1759,6 +1764,9 @@ class FunctionTranslator {
       case 0xd2:
         this.push(this.funcRef(c.u32()), VAL_FUNCREF);
         return;
+      case 0xfd:
+        this.simd(c);
+        return;
       case 0xfc:
         this.prefixed(c);
         return;
@@ -2062,6 +2070,202 @@ class FunctionTranslator {
     }
   }
 
+  /** SIMD uses LLVM vectors with no host ISA requirement. LLVM legalizes the
+   * operations for the selected target; lane order is WebAssembly byte order. */
+  simd(c: WasmCursor): void {
+    const sub = c.u32();
+    const vt = "<16 x i8>";
+    const vector = (v: string, type: string): string =>
+      type === vt ? v : this.emit(`bitcast ${vt} ${v} to ${type}`);
+    const push = (v: string, type: string): void =>
+      this.push(type === vt ? v : this.emit(`bitcast ${type} ${v} to ${vt}`), VAL_V128);
+    const pop = (): string => this.popType(VAL_V128, "SIMD").v;
+    const splat = (v: string, scalar: string, lanes: number): string => {
+      const type = `<${lanes} x ${scalar}>`;
+      const first = this.emit(`insertelement ${type} poison, ${scalar} ${v}, i32 0`);
+      return this.emit(
+        `shufflevector ${type} ${first}, ${type} poison, <${lanes} x i32> zeroinitializer`,
+      );
+    };
+    if (sub <= 11 || (sub >= 84 && sub <= 93)) {
+      const offset = this.memargOffset(c);
+      const laneOp = sub >= 84 && sub <= 91;
+      const store = sub === 11 || (sub >= 88 && sub <= 91);
+      const input = store || laneOp ? pop() : "";
+      const addr = this.popType(VAL_I32, "SIMD memory address").v;
+      const lane = laneOp ? c.u8() : 0;
+      const bytes =
+        sub === 0 || sub === 11
+          ? 16
+          : sub <= 6
+            ? 8
+            : sub <= 10
+              ? 1 << (sub - 7)
+              : laneOp
+                ? 1 << ((sub - 84) % 4)
+                : sub === 92
+                  ? 4
+                  : 8;
+      const ptr = this.address(addr, offset, bytes);
+      if (sub === 11) {
+        this.add(`  store volatile ${vt} ${input}, ptr ${ptr}, align 1`);
+        return;
+      }
+      if (laneOp) {
+        const scalar = `i${bytes * 8}`;
+        const type = `<${16 / bytes} x ${scalar}>`;
+        const v = vector(input, type);
+        if (store) {
+          const element = this.emit(`extractelement ${type} ${v}, i32 ${lane}`);
+          this.add(`  store volatile ${scalar} ${element}, ptr ${ptr}, align 1`);
+        } else {
+          const loaded = this.emit(`load volatile ${scalar}, ptr ${ptr}, align 1`);
+          push(this.emit(`insertelement ${type} ${v}, ${scalar} ${loaded}, i32 ${lane}`), type);
+        }
+        return;
+      }
+      if (sub === 0) {
+        this.push(this.emit(`load volatile ${vt}, ptr ${ptr}, align 1`), VAL_V128);
+        return;
+      }
+      if (sub <= 6) {
+        const bits = 8 << Math.floor((sub - 1) / 2);
+        const lanes = 64 / bits;
+        const from = `<${lanes} x i${bits}>`;
+        const to = `<${lanes} x i${bits * 2}>`;
+        const loaded = this.emit(`load volatile ${from}, ptr ${ptr}, align 1`);
+        push(this.emit(`${sub % 2 === 1 ? "sext" : "zext"} ${from} ${loaded} to ${to}`), to);
+      } else {
+        const scalar = `i${bytes * 8}`;
+        const loaded = this.emit(`load volatile ${scalar}, ptr ${ptr}, align 1`);
+        const type = `<${16 / bytes} x ${scalar}>`;
+        push(
+          sub <= 10
+            ? splat(loaded, scalar, 16 / bytes)
+            : this.emit(`insertelement ${type} zeroinitializer, ${scalar} ${loaded}, i32 0`),
+          type,
+        );
+      }
+      return;
+    }
+    if (sub === 12) {
+      const lanes: string[] = [];
+      for (let i = 0; i < 16; i++) lanes.push(`i8 ${c.u8()}`);
+      this.push(`<${lanes.join(", ")}>`, VAL_V128);
+      return;
+    }
+    if (sub === 13) {
+      const b = pop(),
+        a = pop();
+      const lanes: string[] = [];
+      for (let i = 0; i < 16; i++) lanes.push(`i32 ${c.u8()}`);
+      this.push(
+        this.emit(`shufflevector ${vt} ${a}, ${vt} ${b}, <16 x i32> <${lanes.join(", ")}>`),
+        VAL_V128,
+      );
+      return;
+    }
+    if (sub === 14) {
+      const indices = pop(),
+        input = pop();
+      let result = "poison";
+      for (let i = 0; i < 16; i++) {
+        const index = this.emit(`extractelement ${vt} ${indices}, i32 ${i}`);
+        const valid = this.emit(`icmp ult i8 ${index}, 16`);
+        // An out-of-range LLVM extract is poison even if its result is unused.
+        const safe = this.emit(`and i8 ${index}, 15`);
+        const element = this.emit(`extractelement ${vt} ${input}, i8 ${safe}`);
+        const value = this.emit(`select i1 ${valid}, i8 ${element}, i8 0`);
+        result = this.emit(`insertelement ${vt} ${result}, i8 ${value}, i32 ${i}`);
+      }
+      this.push(result, VAL_V128);
+      return;
+    }
+    if (sub >= 15 && sub <= 34) {
+      const group =
+        sub <= 20
+          ? sub - 15
+          : sub <= 23
+            ? 0
+            : sub <= 26
+              ? 1
+              : sub <= 28
+                ? 2
+                : sub <= 30
+                  ? 3
+                  : sub <= 32
+                    ? 4
+                    : 5;
+      const scalar =
+        group === 0
+          ? "i8"
+          : group === 1
+            ? "i16"
+            : group === 2
+              ? "i32"
+              : group === 3
+                ? "i64"
+                : group === 4
+                  ? "float"
+                  : "double";
+      const lanes = group === 0 ? 16 : group === 1 ? 8 : group === 2 || group === 4 ? 4 : 2;
+      const t = group <= 2 ? VAL_I32 : group === 3 ? VAL_I64 : group === 4 ? VAL_F32 : VAL_F64;
+      const type = `<${lanes} x ${scalar}>`;
+      const replace =
+        sub === 23 || sub === 26 || sub === 28 || sub === 30 || sub === 32 || sub === 34;
+      if (sub <= 20 || replace) {
+        let value = this.popType(t, "SIMD scalar").v;
+        if (group <= 1) value = this.emit(`trunc i32 ${value} to ${scalar}`);
+        if (sub <= 20) push(splat(value, scalar, lanes), type);
+        else {
+          const lane = c.u8();
+          const input = vector(pop(), type);
+          push(this.emit(`insertelement ${type} ${input}, ${scalar} ${value}, i32 ${lane}`), type);
+        }
+      } else {
+        const lane = c.u8();
+        const input = vector(pop(), type);
+        let value = this.emit(`extractelement ${type} ${input}, i32 ${lane}`);
+        if (group <= 1)
+          value = this.emit(
+            `${sub === 21 || sub === 24 ? "sext" : "zext"} ${scalar} ${value} to i32`,
+          );
+        this.push(value, t);
+      }
+      return;
+    }
+    if (sub >= 77 && sub <= 83) {
+      const all = "<" + Array.from({ length: 16 }, () => "i8 -1").join(", ") + ">";
+      const b = pop();
+      if (sub === 77) {
+        this.push(this.emit(`xor ${vt} ${b}, ${all}`), VAL_V128);
+        return;
+      }
+      if (sub === 83) {
+        const wide = this.emit(`bitcast ${vt} ${b} to i128`);
+        const nonzero = this.emit(`icmp ne i128 ${wide}, 0`);
+        this.push(this.emit(`zext i1 ${nonzero} to i32`), VAL_I32);
+        return;
+      }
+      const a = pop();
+      if (sub === 82) {
+        const first = pop();
+        const yes = this.emit(`and ${vt} ${first}, ${b}`);
+        const inv = this.emit(`xor ${vt} ${b}, ${all}`);
+        const no = this.emit(`and ${vt} ${a}, ${inv}`);
+        this.push(this.emit(`or ${vt} ${yes}, ${no}`), VAL_V128);
+      } else {
+        const right = sub === 79 ? this.emit(`xor ${vt} ${b}, ${all}`) : b;
+        this.push(
+          this.emit(`${sub <= 79 ? "and" : sub === 80 ? "or" : "xor"} ${vt} ${a}, ${right}`),
+          VAL_V128,
+        );
+      }
+      return;
+    }
+    throw new WasmTranslateError(`opcode 0xfd ${sub} is not supported`);
+  }
+
   prefixed(c: WasmCursor): void {
     const sub = c.u32();
     if (sub <= 7) {
@@ -2283,6 +2487,14 @@ export function translateWasmModule(
   opts: WasmTranslateOptions,
 ): WasmTranslation {
   const m = parseWasmModule(bytes);
+  // The runtime ABI carries scalar slots and 64-bit global cells. Never
+  // truncate a vector or expose one through the JavaScript call boundary.
+  if (
+    m.types.some((t) => t.params.includes(VAL_V128) || t.results.includes(VAL_V128)) ||
+    m.globals.some((g) => g.type === VAL_V128)
+  ) {
+    throw new WasmTranslateError("v128 function signatures and globals are not supported");
+  }
   for (const t of m.tables) llType(t.elemType);
   const mt = new ModuleTranslator(m, wasmSymbolPrefix(sha256), opts);
   mt.translate();

@@ -9,7 +9,11 @@
  * global initializer may read any earlier immutable global), the decoder
  * follows them, because Node is the behavior oracle.
  *
- * Modules that use a proposal outside that set (SIMD, threads, exception
+ * SIMD data movement and bitwise instructions are also typed and translated.
+ * SIMD arithmetic, vector function signatures and vector globals remain
+ * outside the translated subset.
+ *
+ * Modules that use a proposal outside that set (threads, exception
  * handling, tail calls, function references and GC, memory64, multiple
  * memories) still decode: the instructions that need the proposal are read
  * for their immediates but not type-checked, and the summary names the
@@ -53,7 +57,7 @@ const TRANSLATABLE: ReadonlySet<string> = new Set([
   "extended-const",
 ]);
 
-/** True for proposals inside the translatable feature level. */
+/** True for proposals supported as a whole. SIMD support is module-specific. */
 export function isTranslatableFeature(feature: string): boolean {
   return TRANSLATABLE.has(feature);
 }
@@ -405,6 +409,8 @@ class ModuleDecoder {
   sawCode = false;
   /** A type definition outside the function-type subset stopped typing. */
   gcTypes = false;
+  /** SIMD data movement and bitwise operations are translated; arithmetic is not yet. */
+  unsupportedSimd = false;
 
   constructor(bytes: Uint8Array) {
     this.bytes = bytes;
@@ -516,6 +522,7 @@ class ModuleDecoder {
     const nResults = r.u32();
     if (nResults > MAX_RESULTS) r.malformed("too many results");
     for (let i = 0; i < nResults; i++) results.push(this.valType(r));
+    if (params.includes(V128) || results.includes(V128)) this.unsupportedSimd = true;
     if (results.length > 1) this.feature("multi-value");
     return { params, results };
   }
@@ -594,6 +601,7 @@ class ModuleDecoder {
 
   globalType(r: Reader): Global {
     const type = this.valType(r);
+    if (type === V128) this.unsupportedSimd = true;
     if (type === FUNCREF || type === EXTERNREF) this.feature("reference-types");
     const mut = r.u8();
     if (mut > 1) r.malformed("malformed mutability");
@@ -1102,7 +1110,6 @@ class FunctionValidator {
       total += n;
       if (total > MAX_LOCALS) r.malformed("too many locals");
       const t = this.m.valType(r);
-      if (t === V128) this.typed = false;
       if (isRef(t)) this.m.feature("reference-types");
       for (let k = 0; k < n; k++) this.locals.push(t);
     }
@@ -1500,8 +1507,7 @@ class FunctionValidator {
         this.prefixFC();
         return;
       case 0xfd:
-        this.untyped("simd");
-        this.scanSimd();
+        this.prefixSimd();
         return;
       case 0xfe:
         this.untyped("threads");
@@ -1860,7 +1866,76 @@ class FunctionValidator {
     }
   }
 
+  /** Validate the implemented SIMD subset without disabling scalar stack typing. */
+  prefixSimd(): void {
+    const r = this.r;
+    this.m.feature("simd");
+    const start = r.pos;
+    const sub = r.u32();
+    if (sub > 34 && (sub < 77 || sub > 93)) {
+      this.m.unsupportedSimd = true;
+      this.typed = false;
+      r.pos = start;
+      this.scanSimd();
+      return;
+    }
+    if (sub <= 11 || (sub >= 84 && sub <= 93)) {
+      const align =
+        sub === 0 || sub === 11
+          ? 4
+          : sub <= 6
+            ? 3
+            : sub <= 10
+              ? sub - 7
+              : sub <= 91
+                ? (sub - 84) % 4
+                : sub - 90;
+      this.memarg(align);
+      const lane = sub >= 84 && sub <= 91 ? r.u8() : 0;
+      if (!this.typed) return;
+      if (sub === 11 || (sub >= 84 && sub <= 91)) this.popExpect(V128);
+      this.popExpect(I32);
+      if (sub >= 84 && sub <= 91) {
+        const lanes = 16 >> ((sub - 84) % 4);
+        if (lane >= lanes) this.invalid("invalid lane index");
+      }
+      if (sub !== 11 && !(sub >= 88 && sub <= 91)) this.push(V128);
+      return;
+    }
+    if (sub === 12) {
+      r.skip(16);
+      this.push(V128);
+      return;
+    }
+    if (sub === 13) {
+      for (let i = 0; i < 16; i++) if (r.u8() >= 32) this.invalid("invalid shuffle lane index");
+    }
+    if (sub >= 15 && sub <= 20) {
+      this.popExpect(sub <= 17 ? I32 : sub === 18 ? I64 : sub === 19 ? F32 : F64);
+      this.push(V128);
+      return;
+    }
+    if (sub >= 21 && sub <= 34) {
+      const group =
+        sub <= 23 ? 0 : sub <= 26 ? 1 : sub <= 28 ? 2 : sub <= 30 ? 3 : sub <= 32 ? 4 : 5;
+      const laneCount = group === 0 ? 16 : group === 1 ? 8 : group === 2 || group === 4 ? 4 : 2;
+      if (r.u8() >= laneCount) this.invalid("invalid lane index");
+      const type = group <= 2 ? I32 : group === 3 ? I64 : group === 4 ? F32 : F64;
+      const replace =
+        sub === 23 || sub === 26 || sub === 28 || sub === 30 || sub === 32 || sub === 34;
+      if (replace) this.popExpect(type);
+      this.popExpect(V128);
+      this.push(replace ? V128 : type);
+      return;
+    }
+    this.popExpect(V128);
+    if (sub !== 77 && sub !== 83) this.popExpect(V128);
+    if (sub === 82) this.popExpect(V128);
+    this.push(sub === 83 ? I32 : V128);
+  }
+
   scanSimd(): void {
+    this.m.unsupportedSimd = true;
     const r = this.r;
     const sub = r.u32();
     if (sub <= 11 || sub === 92 || sub === 93) {
@@ -1912,7 +1987,8 @@ export function analyzeWasm(bytes: Uint8Array): WasmModuleSummary {
   for (const feature of WASM_FEATURES) {
     if (!m.features.has(feature)) continue;
     features.push(feature);
-    if (!TRANSLATABLE.has(feature)) unsupported.push(feature);
+    if (feature === "simd" ? m.unsupportedSimd : !TRANSLATABLE.has(feature))
+      unsupported.push(feature);
   }
   if (status === "valid" && unsupported.length > 0) status = "unsupported";
   return {
