@@ -1488,5 +1488,25 @@
     "name": "dot-overflow",
     "base64": "AGFzbQEAAAABBgFgAX8BfwMCAQAFAwEAAQcQAgNydW4AAAZtZW1vcnkCAAobARkAQQBBIP0AAABBMP0AAAD9ugH9CwAAQQALCyYBAEEgCyAAgACA/3//f///AQD+/wMAAIAAgP9//3///wEA/v8DAA==",
     "width": 0
+  },
+  {
+    "name": "internal-vector-call",
+    "base64": "AGFzbQEAAAABCwJgAX8Bf2ABewF7AwMCAAEFAwEAAQcQAgNydW4AAAZtZW1vcnkCAAobAhIAQQBBIP0AAAAQAf0LAABBAAsGACAA/WELCxYBAEEgCxAAf4D/DxAfID9AAQIDBAUG",
+    "width": 0
+  },
+  {
+    "name": "internal-vector-shift",
+    "base64": "AGFzbQEAAAABDAJgAX8Bf2ACf3sBewMDAgABBQMBAAEHEAIDcnVuAAAGbWVtb3J5AgAKHwIUAEEAIABBIP0AAAAQAf0LAABBAAsIACABIAD9awsLFgEAQSALEAB/gP8PEB8gP0ABAgMEBQY=",
+    "width": -1
+  },
+  {
+    "name": "indexed-vector-block",
+    "base64": "AGFzbQEAAAABCwJgAX8Bf2ABewF7AwIBAAUDAQABBxACA3J1bgAABm1lbW9yeQIAChcBFQBBAEEg/QAAAAIB/WEL/QsAAEEACwsWAQBBIAsQAH+A/w8QHyA/QAECAwQFBg==",
+    "width": 0
+  },
+  {
+    "name": "internal-vector-multivalue",
+    "base64": "AGFzbQEAAAABDAJgAX8Bf2ABewJ/ewMDAgABBQMBAAEHEAIDcnVuAAAGbWVtb3J5AgAKGQIQAEEg/QAAABAB/QsAAEEACwYAQQAgAAsLFgEAQSALEAB/gP8PEB8gP0ABAgMEBQY=",
+    "width": 0
   }
 ]

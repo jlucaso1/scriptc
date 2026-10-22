@@ -24,7 +24,7 @@
  * The decoder never evaluates anything and keeps no module contents beyond
  * the counts and the feature set it reports. It is plain TypeScript that
  * the native compiler also compiles. */
-import { readMemargFlags } from "./module.js";
+import { hasVectorSignature, readMemargFlags } from "./module.js";
 import { simdIntegerOp } from "./simd.js";
 
 /** Proposals the summary can name, in report order. The first group is the
@@ -523,7 +523,6 @@ class ModuleDecoder {
     const nResults = r.u32();
     if (nResults > MAX_RESULTS) r.malformed("too many results");
     for (let i = 0; i < nResults; i++) results.push(this.valType(r));
-    if (params.includes(V128) || results.includes(V128)) this.unsupportedSimd = true;
     if (results.length > 1) this.feature("multi-value");
     return { params, results };
   }
@@ -1114,7 +1113,6 @@ class FunctionValidator {
       if (isRef(t)) this.m.feature("reference-types");
       for (let k = 0; k < n; k++) this.locals.push(t);
     }
-    if (this.type.params.includes(V128) || this.type.results.includes(V128)) this.typed = false;
     if (this.m.memory64 || this.m.gcTypes) this.typed = false;
     this.pushCtrl(-1, [], this.type.results);
     while (this.ctrls.length > 0) {
@@ -1992,6 +1990,17 @@ export function analyzeWasm(bytes: Uint8Array): WasmModuleSummary {
   let error: string | null = null;
   try {
     m.decode();
+    // Internal native calls carry v128 directly. JavaScript/import/reference
+    // thunks still carry scalar slots, so no vector may reach those paths.
+    for (let f = 0; f < m.funcs.length; f++) {
+      const type = m.types[m.funcs[f]!];
+      if (
+        type !== undefined &&
+        hasVectorSignature(type) &&
+        (f < m.importedFuncs || m.declaredRefs.has(f))
+      )
+        m.unsupportedSimd = true;
+    }
   } catch (e) {
     if (!(e instanceof WasmError)) throw e;
     status = e.kind;

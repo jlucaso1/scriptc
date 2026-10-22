@@ -49,6 +49,7 @@ import {
   VAL_V128,
   WasmCursor,
   parseWasmModule,
+  hasVectorSignature,
   readMemargFlags,
   skipImmediates,
   type WasmFuncType,
@@ -163,6 +164,8 @@ function zeroOf(t: number): string {
 /** The runtime's signature letter of a value type. */
 function sigChar(t: number): string {
   switch (t) {
+    case VAL_V128:
+      return "v";
     case VAL_I32:
       return "i";
     case VAL_I64:
@@ -2585,10 +2588,16 @@ export function translateWasmModule(
   // The runtime ABI carries scalar slots and 64-bit global cells. Never
   // truncate a vector or expose one through the JavaScript call boundary.
   if (
-    m.types.some((t) => t.params.includes(VAL_V128) || t.results.includes(VAL_V128)) ||
+    m.funcTypes.some(
+      (type, index) =>
+        hasVectorSignature(m.types[type]!) &&
+        (index < m.importedFuncs || m.declaredRefs.has(index)),
+    ) ||
     m.globals.some((g) => g.type === VAL_V128)
   ) {
-    throw new WasmTranslateError("v128 function signatures and globals are not supported");
+    throw new WasmTranslateError(
+      "v128 function signatures at import/export/reference boundaries and globals are not supported",
+    );
   }
   for (const t of m.tables) llType(t.elemType);
   const mt = new ModuleTranslator(m, wasmSymbolPrefix(sha256), opts);

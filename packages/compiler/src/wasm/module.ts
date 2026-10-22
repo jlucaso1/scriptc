@@ -30,6 +30,11 @@ export interface WasmFuncType {
   results: number[];
 }
 
+/** Whether a function type contains a vector in its native signature. */
+export function hasVectorSignature(type: WasmFuncType): boolean {
+  return type.params.includes(VAL_V128) || type.results.includes(VAL_V128);
+}
+
 /** A byte range of the module: a constant expression (through its `end`
  * opcode) or a payload. */
 export interface WasmRange {

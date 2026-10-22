@@ -289,9 +289,12 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(v8Validate(bytes)).toBe(true);
     expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
     expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 228");
-    const abi = Buffer.from(
-      "AGFzbQEAAAABBQFgAAF7AwIBAAoWA RQA/QwAAAAAAAAAAAAAAAAAAAAACw==".replaceAll(" ", ""),
-      "base64",
+    const vectorBody = [0, ...vector, 11];
+    const abi = wasmModule(
+      [1, 1, 96, 0, 1, 123],
+      [3, 1, 0],
+      [7, 1, 6, 118, 101, 99, 116, 111, 114, 0, 0],
+      [10, 1, vectorBody.length, ...vectorBody],
     );
     expect(v8Validate(abi)).toBe(true);
     expect(analyzeWasm(abi).unsupported).toEqual(["simd"]);
@@ -394,6 +397,44 @@ describe("SIMD data movement and bitwise subset", () => {
       [3, 1, 0],
       [10, 1, instructions.length, ...instructions],
     );
+    expect(v8Validate(bytes)).toBe(false);
+    expect(analyzeWasm(bytes).status).toBe("invalid");
+  });
+
+  test("vector function references stay outside the scalar thunk ABI", () => {
+    const original = Buffer.from(
+      simdFixtures.find((f) => f.name === "internal-vector-call")!.base64,
+      "base64",
+    );
+    const c = new WasmCursor(original, 8);
+    let pos = c.pos;
+    while (c.pos < original.length) {
+      pos = c.pos;
+      const id = c.u8(),
+        size = c.u32();
+      if (id === 10) break;
+      c.pos += size;
+    }
+    const bytes = Buffer.concat([
+      original.subarray(0, pos),
+      Buffer.from([9, 5, 1, 3, 0, 1, 1]),
+      original.subarray(pos),
+    ]);
+    expect(v8Validate(bytes)).toBe(true);
+    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
+    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow(
+      "v128 function signatures",
+    );
+  });
+
+  test("internal vector function bodies stay type checked", () => {
+    const bytes = Buffer.from(
+      simdFixtures.find((f) => f.name === "internal-vector-call")!.base64,
+      "base64",
+    );
+    const offset = bytes.lastIndexOf(Buffer.from([32, 0, 253, 97, 11]));
+    expect(offset).toBeGreaterThan(0);
+    bytes[offset] = 65;
     expect(v8Validate(bytes)).toBe(false);
     expect(analyzeWasm(bytes).status).toBe("invalid");
   });
