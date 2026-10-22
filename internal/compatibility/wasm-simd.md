@@ -78,3 +78,9 @@ The fifth family permits vector parameters/results for internal functions that c
 ## Remaining integer SIMD instructions
 
 The sixth family completes integer SIMD at 184/236 total opcodes. Saturating add/sub uses double-width arithmetic before clamping. Both signed and unsigned narrowing interpret the wider source lanes as signed values; the suffix selects the destination interval. Q15 multiplication rounds by adding 0x4000 before arithmetic shift and saturates -32768 times -32768 to 32767. Unsigned averages widen before adding so maximum inputs do not wrap. Byte popcount uses portable lane-wise bit operations. The 318-module corpus passes both differential suites in plain and sanitized lanes, including clipping, rounding ties, sign boundaries and operand-type failures. LLVM object emission passes both bounds policies on all five target triples.
+
+## Large real-artifact functions and reduced execution
+
+The exact 6.3 MB bridge artifact was translated and executed natively through its SHA-256 export for input sizes 0, 3, 64, 1024 and 65536. Results match V8 byte for byte and match an independent SHA-256 implementation in both plain and ASan/RC-audit executions. The reduced driver implements only three verified byte-array host callbacks; every unexpected host call throws. This proves that reduced WASM path, not the full bridge JavaScript package or protocol compatibility. `tests/wasm-spec/bridge-simd-consumer.mjs` generates the driver for the exact SHA-256-pinned artifact without committing the binary.
+
+The sanitized real module exposed a pre-existing emission limit: passing a large function's line array through `push(...lines)` exceeded V8's argument stack. Function and initializer lines are now appended in loops, preserving byte order without changing the stack size or disabling checks. A 70,000-operation valid scalar function pins the regression.

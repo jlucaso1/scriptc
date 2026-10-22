@@ -493,8 +493,8 @@ class ModuleTranslator {
     }
     body.add(`  ret void`);
     const out = [`define internal void ${name}(ptr %inst) nounwind {`, `entry:`];
-    out.push(...f.entry.lines);
-    out.push(...body.lines);
+    for (const line of f.entry.lines) out.push(line);
+    for (const line of body.lines) out.push(line);
     out.push(`}`);
     this.text.push(out.join("\n"));
     return name;
@@ -1253,7 +1253,7 @@ class FunctionTranslator {
     const out: string[] = [];
     out.push(`define internal ${this.mt.signature(ft, this.mt.fn(this.index))} ${FUNC_ATTRS} {`);
     out.push(`entry:`);
-    out.push(...this.entry.lines);
+    for (const line of this.entry.lines) out.push(line);
     if (!this.checked && this.baseValue !== null) {
       out.push(`  %membase.p = getelementptr inbounds i8, ptr %inst, i64 ${OFF_MEMBASE}`);
       out.push(`  %membase = load ptr, ptr %membase.p, align 8`);
@@ -1278,7 +1278,7 @@ class FunctionTranslator {
       out.push(`  br label %body`);
     }
     out.push(`body:`);
-    out.push(...this.lines.lines);
+    for (const line of this.lines.lines) out.push(line);
     for (const [code2, label] of this.trapLabels) {
       out.push(`${label}:`);
       out.push(`  call void @scr_wasm_trap(i32 ${code2})`);

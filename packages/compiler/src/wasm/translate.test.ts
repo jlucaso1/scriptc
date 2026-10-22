@@ -455,6 +455,32 @@ describe("SIMD data movement and bitwise subset", () => {
     },
   );
 
+  test("large function emission does not use the JavaScript argument stack", () => {
+    const count = 70_000;
+    const body = Buffer.alloc(1 + 7 * count + 3);
+    for (let i = 0; i < count; i++) body.set([32, 0, 65, 1, 106, 33, 0], 1 + 7 * i);
+    body.set([32, 0, 11], 1 + 7 * count);
+    const leb = (value: number): Buffer => {
+      const bytes: number[] = [];
+      do {
+        const low = value & 127;
+        value >>>= 7;
+        bytes.push(low | (value ? 128 : 0));
+      } while (value);
+      return Buffer.from(bytes);
+    };
+    const code = Buffer.concat([Buffer.from([1]), leb(body.length), body]);
+    const bytes = Buffer.concat([
+      Buffer.from([0, 97, 115, 109, 1, 0, 0, 0, 1, 6, 1, 96, 1, 127, 1, 127, 3, 2, 1, 0, 10]),
+      leb(code.length),
+      code,
+    ]);
+    expect(v8Validate(bytes)).toBe(true);
+    expect(analyzeWasm(bytes).status).toBe("valid");
+    const text = translateWasmModule(bytes, SHA, { boundsChecks: true }).text.join("\n");
+    expect(text.split("add i32").length - 1).toBe(count);
+  });
+
   test("SIMD stores check the full range even with guard pages", () => {
     const bytes = Buffer.from(simdFixtures.find((f) => f.name === "store-param")!.base64, "base64");
     const text = translateWasmModule(bytes, SHA, { boundsChecks: false }).text.join("\n");
