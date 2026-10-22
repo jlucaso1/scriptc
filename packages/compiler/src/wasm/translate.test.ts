@@ -258,7 +258,7 @@ const simdFixtures: { name: string; base64: string; width: number }[] = JSON.par
   ),
 );
 
-describe("SIMD data movement and bitwise subset", () => {
+describe("SIMD128 instruction translation", () => {
   test.each(simdFixtures)(
     "validates and translates $name with either bounds policy",
     ({ base64 }) => {
@@ -278,17 +278,8 @@ describe("SIMD data movement and bitwise subset", () => {
     },
   );
 
-  test("keeps arithmetic, relaxed SIMD and the vector ABI outside the supported subset", () => {
+  test("keeps scalar runtime ABI boundaries outside the supported subset", () => {
     const vector = [253, 12, ...new Array<number>(16).fill(0)];
-    const instructions = [0, ...vector, ...vector, 253, 228, 1, 253, 83, 11]; // f32x4.add, then any_true
-    const bytes = wasmModule(
-      [1, 1, 96, 0, 1, 127],
-      [3, 1, 0],
-      [10, 1, instructions.length, ...instructions],
-    );
-    expect(v8Validate(bytes)).toBe(true);
-    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 228");
     const vectorBody = [0, ...vector, 11];
     const abi = wasmModule(
       [1, 1, 96, 0, 1, 123],
@@ -346,7 +337,7 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(
       inventory.filter((entry) => entry.translated).map((entry) => Number(entry.opcode)),
     ).toEqual([...exercised].sort((a, b) => a - b));
-    expect(exercised.size).toBe(184);
+    expect(exercised.size).toBe(236);
   });
 
   test.each([0x23, 0xd6, 0x63, 0x64, 0xc3, 0xc4])(
@@ -480,6 +471,38 @@ describe("SIMD data movement and bitwise subset", () => {
     const text = translateWasmModule(bytes, SHA, { boundsChecks: true }).text.join("\n");
     expect(text.split("add i32").length - 1).toBe(count);
   });
+
+  test.each([0x9a, 0xa2, 0xaf, 0xbb, 0xe2, 0xee, 0x114])(
+    "rejects reserved SIMD opcode %i as malformed",
+    (sub) => {
+      const op = sub < 128 ? [253, sub] : [253, (sub & 127) | 128, sub >>> 7];
+      const instructions = [0, ...op, 65, 0, 11];
+      const bytes = wasmModule(
+        [1, 1, 96, 0, 1, 127],
+        [3, 1, 0],
+        [10, 1, instructions.length, ...instructions],
+      );
+      expect(v8Validate(bytes)).toBe(false);
+      expect(analyzeWasm(bytes).status).toBe("malformed");
+    },
+  );
+
+  test.each([0x41, 0xe4, 0xe3, 0x67, 0x5e, 0xfc])(
+    "rejects scalar operands for float SIMD opcode %i",
+    (sub) => {
+      const vector = [253, 12, ...new Array<number>(16).fill(0)];
+      const binary = sub === 0x41 || sub === 0xe4;
+      const op = sub < 128 ? [253, sub] : [253, sub, 1];
+      const instructions = [0, ...(binary ? vector : []), 65, 0, ...op, 253, 83, 11];
+      const bytes = wasmModule(
+        [1, 1, 96, 0, 1, 127],
+        [3, 1, 0],
+        [10, 1, instructions.length, ...instructions],
+      );
+      expect(v8Validate(bytes)).toBe(false);
+      expect(analyzeWasm(bytes).status).toBe("invalid");
+    },
+  );
 
   test("SIMD stores check the full range even with guard pages", () => {
     const bytes = Buffer.from(simdFixtures.find((f) => f.name === "store-param")!.base64, "base64");

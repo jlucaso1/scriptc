@@ -80,3 +80,63 @@ export function simdIntegerOp(sub: number): SimdIntegerOp | null {
   if (sub === 0x62) return { bits: 8, kind: "popcnt", operation: "" };
   return null;
 }
+
+/** Floating-point SIMD metadata. Arithmetic families are added separately. */
+export interface SimdFloatOp {
+  bits: number;
+  kind: "compare" | "unary" | "binary" | "convert";
+  operation: string;
+}
+
+export function simdFloatOp(sub: number): SimdFloatOp | null {
+  if (sub >= 0x41 && sub <= 0x4c) {
+    const index = sub - 0x41;
+    return {
+      bits: index < 6 ? 32 : 64,
+      kind: "compare",
+      operation: ["oeq", "une", "olt", "ogt", "ole", "oge"][index % 6]!,
+    };
+  }
+  for (let group = 0; group < 2; group++) {
+    const bits = group === 0 ? 32 : 64;
+    if (sub === 0xe0 + 12 * group) return { bits, kind: "unary", operation: "abs" };
+    if (sub === 0xe1 + 12 * group) return { bits, kind: "unary", operation: "neg" };
+    if (sub === 0xea + 12 * group) return { bits, kind: "binary", operation: "pmin" };
+    if (sub === 0xeb + 12 * group) return { bits, kind: "binary", operation: "pmax" };
+  }
+  for (let group = 0; group < 2; group++) {
+    const bits = group === 0 ? 32 : 64;
+    if (sub === 0xe3 + 12 * group) return { bits, kind: "unary", operation: "sqrt" };
+    const binary = sub - (0xe4 + 12 * group);
+    if (binary >= 0 && binary < 6)
+      return {
+        bits,
+        kind: "binary",
+        operation: ["add", "sub", "mul", "div", "min", "max"][binary]!,
+      };
+  }
+  if (sub >= 0x67 && sub <= 0x6a)
+    return {
+      bits: 32,
+      kind: "unary",
+      operation: ["ceil", "floor", "trunc", "nearest"][sub - 0x67]!,
+    };
+  if (sub === 0x74 || sub === 0x75 || sub === 0x7a || sub === 0x94)
+    return {
+      bits: 64,
+      kind: "unary",
+      operation:
+        sub === 0x74 ? "ceil" : sub === 0x75 ? "floor" : sub === 0x7a ? "trunc" : "nearest",
+    };
+  if (sub === 0x5e) return { bits: 64, kind: "convert", operation: "demote" };
+  if (sub === 0x5f) return { bits: 32, kind: "convert", operation: "promote" };
+  if (sub >= 0xf8 && sub <= 0xff) {
+    const index = sub - 0xf8;
+    return {
+      bits: index < 4 ? 32 : 64,
+      kind: "convert",
+      operation: `${index % 4 < 2 ? "trunc" : "from"}_${index % 2 === 0 ? "s" : "u"}`,
+    };
+  }
+  return null;
+}

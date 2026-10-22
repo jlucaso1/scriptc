@@ -327,62 +327,62 @@
   {
     "opcode": "0x41",
     "instruction": "f32x4.eq",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x42",
     "instruction": "f32x4.ne",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x43",
     "instruction": "f32x4.lt",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x44",
     "instruction": "f32x4.gt",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x45",
     "instruction": "f32x4.le",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x46",
     "instruction": "f32x4.ge",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x47",
     "instruction": "f64x2.eq",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x48",
     "instruction": "f64x2.ne",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x49",
     "instruction": "f64x2.lt",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x4a",
     "instruction": "f64x2.gt",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x4b",
     "instruction": "f64x2.le",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x4c",
     "instruction": "f64x2.ge",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x4d",
@@ -472,12 +472,12 @@
   {
     "opcode": "0x5e",
     "instruction": "f32x4.demote_f64x2_zero",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x5f",
     "instruction": "f64x2.promote_low_f32x4",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x60",
@@ -517,22 +517,22 @@
   {
     "opcode": "0x67",
     "instruction": "f32x4.ceil",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x68",
     "instruction": "f32x4.floor",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x69",
     "instruction": "f32x4.trunc",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x6a",
     "instruction": "f32x4.nearest",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x6b",
@@ -582,12 +582,12 @@
   {
     "opcode": "0x74",
     "instruction": "f64x2.ceil",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x75",
     "instruction": "f64x2.floor",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x76",
@@ -612,7 +612,7 @@
   {
     "opcode": "0x7a",
     "instruction": "f64x2.trunc",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x7b",
@@ -742,7 +742,7 @@
   {
     "opcode": "0x94",
     "instruction": "f64x2.nearest",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x95",
@@ -1032,151 +1032,151 @@
   {
     "opcode": "0xe0",
     "instruction": "f32x4.abs",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe1",
     "instruction": "f32x4.neg",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe3",
     "instruction": "f32x4.sqrt",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe4",
     "instruction": "f32x4.add",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe5",
     "instruction": "f32x4.sub",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe6",
     "instruction": "f32x4.mul",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe7",
     "instruction": "f32x4.div",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe8",
     "instruction": "f32x4.min",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe9",
     "instruction": "f32x4.max",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xea",
     "instruction": "f32x4.pmin",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xeb",
     "instruction": "f32x4.pmax",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xec",
     "instruction": "f64x2.abs",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xed",
     "instruction": "f64x2.neg",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xef",
     "instruction": "f64x2.sqrt",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf0",
     "instruction": "f64x2.add",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf1",
     "instruction": "f64x2.sub",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf2",
     "instruction": "f64x2.mul",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf3",
     "instruction": "f64x2.div",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf4",
     "instruction": "f64x2.min",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf5",
     "instruction": "f64x2.max",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf6",
     "instruction": "f64x2.pmin",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf7",
     "instruction": "f64x2.pmax",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf8",
     "instruction": "i32x4.trunc_sat_f32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xf9",
     "instruction": "i32x4.trunc_sat_f32x4_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xfa",
     "instruction": "f32x4.convert_i32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xfb",
     "instruction": "f32x4.convert_i32x4_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xfc",
     "instruction": "i32x4.trunc_sat_f64x2_s_zero",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xfd",
     "instruction": "i32x4.trunc_sat_f64x2_u_zero",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xfe",
     "instruction": "f64x2.convert_low_i32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xff",
     "instruction": "f64x2.convert_low_i32x4_u",
-    "translated": false
+    "translated": true
   }
 ]

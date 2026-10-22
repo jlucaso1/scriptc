@@ -25,7 +25,7 @@
  * the counts and the feature set it reports. It is plain TypeScript that
  * the native compiler also compiles. */
 import { hasVectorSignature, readMemargFlags } from "./module.js";
-import { simdIntegerOp } from "./simd.js";
+import { simdIntegerOp, simdFloatOp } from "./simd.js";
 
 /** Proposals the summary can name, in report order. The first group is the
  * translatable set; the rest are reported as unsupported. */
@@ -1871,6 +1871,13 @@ class FunctionValidator {
     this.m.feature("simd");
     const start = r.pos;
     const sub = r.u32();
+    const floating = simdFloatOp(sub);
+    if (floating !== null) {
+      this.popExpect(V128);
+      if (floating.kind === "compare" || floating.kind === "binary") this.popExpect(V128);
+      this.push(V128);
+      return;
+    }
     const integer = simdIntegerOp(sub);
     if (integer !== null) {
       if (integer.kind === "shift") this.popExpect(I32);
@@ -1889,6 +1896,7 @@ class FunctionValidator {
       return;
     }
     if (sub > 34 && (sub < 77 || sub > 93)) {
+      if (sub < 0x100 || sub > 0x113) r.malformed(`illegal opcode 0xfd ${sub}`);
       this.m.unsupportedSimd = true;
       this.typed = false;
       r.pos = start;

@@ -57,7 +57,7 @@ import {
   type WasmRange,
 } from "./module.js";
 
-import { simdIntegerOp } from "./simd.js";
+import { simdIntegerOp, simdFloatOp, type SimdFloatOp } from "./simd.js";
 
 /** Trap codes (scr_wasm_abi.h SCR_WASM_TRAP_*). */
 export const TRAP_UNREACHABLE = 1;
@@ -294,6 +294,7 @@ class ModuleTranslator {
   p: string;
   opts: WasmTranslateOptions;
   text: string[] = [];
+  intrinsicDecls = new Set<string>();
   /** Functions that need a reference record. */
   refs: Set<number>;
   /** Functions whose entry checks the stack (stackCheckedFunctions). */
@@ -2080,10 +2081,200 @@ class FunctionTranslator {
     }
   }
 
+  /** Non-bitwise float operations may produce any permitted arithmetic NaN.
+   * Canonicalizing their NaNs also guarantees that signaling inputs quiet. */
+  simdFloatMath(op: SimdFloatOp): void {
+    const lanes = 128 / op.bits;
+    const scalar = op.bits === 32 ? "float" : "double";
+    const type = `<${lanes} x ${scalar}>`;
+    const integer = `<${lanes} x i${op.bits}>`;
+    const mask = `<${lanes} x i1>`;
+    const read = (): string =>
+      this.emit(`bitcast <16 x i8> ${this.popType(VAL_V128, "SIMD float").v} to ${type}`);
+    const push = (value: string, valueType: string): void =>
+      this.push(this.emit(`bitcast ${valueType} ${value} to <16 x i8>`), VAL_V128);
+    const intConstant = (bits: number, count: number, value: string): string =>
+      `<${Array.from({ length: count }, () => `i${bits} ${value}`).join(", ")}>`;
+    const canonical = (value: string, bits: number, count: number, nan = ""): string => {
+      const valueType = `<${count} x ${bits === 32 ? "float" : "double"}>`;
+      const nanMask = nan || this.emit(`fcmp uno ${valueType} ${value}, ${value}`);
+      const nanBits = intConstant(bits, count, bits === 32 ? "2143289344" : "u0x7FF8000000000000");
+      const quiet = this.emit(`bitcast <${count} x i${bits}> ${nanBits} to ${valueType}`);
+      return this.emit(
+        `select <${count} x i1> ${nanMask}, ${valueType} ${quiet}, ${valueType} ${value}`,
+      );
+    };
+    const intrinsic = (
+      name: string,
+      resultType: string,
+      inputType: string,
+      value: string,
+    ): string => {
+      this.mt.intrinsicDecls.add(`declare ${resultType} @llvm.${name}(${inputType})`);
+      return this.emit(`call ${resultType} @llvm.${name}(${inputType} ${value})`);
+    };
+    const b = read();
+    if (op.kind === "convert") {
+      if (op.operation === "demote") {
+        const small = this.emit(`fptrunc ${type} ${b} to <2 x float>`);
+        const value = canonical(small, 32, 2);
+        push(
+          this.emit(
+            `shufflevector <2 x float> ${value}, <2 x float> zeroinitializer, <4 x i32> <i32 0, i32 1, i32 2, i32 3>`,
+          ),
+          "<4 x float>",
+        );
+      } else if (op.operation === "promote") {
+        const small = this.emit(
+          `shufflevector ${type} ${b}, ${type} poison, <2 x i32> <i32 0, i32 1>`,
+        );
+        const value = this.emit(`fpext <2 x float> ${small} to <2 x double>`);
+        push(canonical(value, 64, 2), "<2 x double>");
+      } else if (op.operation.startsWith("trunc")) {
+        const resultType = `<${lanes} x i32>`;
+        const signed = op.operation.endsWith("s");
+        let value = intrinsic(
+          `fpto${signed ? "si" : "ui"}.sat.v${lanes}i32.v${lanes}f${op.bits}`,
+          resultType,
+          type,
+          b,
+        );
+        if (op.bits === 64)
+          value = this.emit(
+            `shufflevector <2 x i32> ${value}, <2 x i32> zeroinitializer, <4 x i32> <i32 0, i32 1, i32 2, i32 3>`,
+          );
+        push(value, "<4 x i32>");
+      } else {
+        let value = this.emit(`bitcast ${type} ${b} to <4 x i32>`);
+        const sourceType = `<${lanes} x i32>`;
+        if (op.bits === 64)
+          value = this.emit(
+            `shufflevector <4 x i32> ${value}, <4 x i32> poison, <2 x i32> <i32 0, i32 1>`,
+          );
+        push(
+          this.emit(
+            `${op.operation.endsWith("s") ? "sitofp" : "uitofp"} ${sourceType} ${value} to ${type}`,
+          ),
+          type,
+        );
+      }
+      return;
+    }
+    if (op.kind === "unary") {
+      let value: string;
+      if (op.operation === "nearest") {
+        const source = this.emit(`bitcast ${type} ${b} to ${integer}`);
+        const sign = intConstant(
+          op.bits,
+          lanes,
+          op.bits === 32 ? "2147483648" : "u0x8000000000000000",
+        );
+        const magnitude = intConstant(
+          op.bits,
+          lanes,
+          op.bits === 32 ? "2147483647" : "u0x7FFFFFFFFFFFFFFF",
+        );
+        const absoluteBits = this.emit(`and ${integer} ${source}, ${magnitude}`);
+        const absolute = this.emit(`bitcast ${integer} ${absoluteBits} to ${type}`);
+        const magicBits = intConstant(
+          op.bits,
+          lanes,
+          op.bits === 32 ? "1258291200" : "u0x4330000000000000",
+        );
+        const magic = this.emit(`bitcast ${integer} ${magicBits} to ${type}`);
+        const sum = this.emit(`fadd ${type} ${absolute}, ${magic}`);
+        const rounded = this.emit(`fsub ${type} ${sum}, ${magic}`);
+        const large = this.emit(`fcmp oge ${type} ${absolute}, ${magic}`);
+        const chosen = this.emit(
+          `select ${mask} ${large}, ${type} ${absolute}, ${type} ${rounded}`,
+        );
+        const roundedBits = this.emit(`bitcast ${type} ${chosen} to ${integer}`);
+        const signBits = this.emit(`and ${integer} ${source}, ${sign}`);
+        const result = this.emit(`or ${integer} ${roundedBits}, ${signBits}`);
+        value = this.emit(`bitcast ${integer} ${result} to ${type}`);
+      } else value = intrinsic(`${op.operation}.v${lanes}f${op.bits}`, type, type, b);
+      push(canonical(value, op.bits, lanes), type);
+      return;
+    }
+    const a = read();
+    if (op.operation === "min" || op.operation === "max") {
+      const less = this.emit(`fcmp ${op.operation === "min" ? "olt" : "ogt"} ${type} ${a}, ${b}`);
+      const chosen = this.emit(`select ${mask} ${less}, ${type} ${a}, ${type} ${b}`);
+      const equal = this.emit(`fcmp oeq ${type} ${a}, ${b}`);
+      const aBits = this.emit(`bitcast ${type} ${a} to ${integer}`);
+      const bBits = this.emit(`bitcast ${type} ${b} to ${integer}`);
+      // Equal finite values have identical bits except for signed zero.
+      const tieBits = this.emit(
+        `${op.operation === "min" ? "or" : "and"} ${integer} ${aBits}, ${bBits}`,
+      );
+      const tie = this.emit(`bitcast ${integer} ${tieBits} to ${type}`);
+      const value = this.emit(`select ${mask} ${equal}, ${type} ${tie}, ${type} ${chosen}`);
+      const nan = this.emit(`fcmp uno ${type} ${a}, ${b}`);
+      push(canonical(value, op.bits, lanes, nan), type);
+    } else {
+      const value = this.emit(`f${op.operation} ${type} ${a}, ${b}`);
+      push(canonical(value, op.bits, lanes), type);
+    }
+  }
+
+  /** Float predicates and operand-selection instructions preserve NaN bits. */
+  simdFloat(op: SimdFloatOp): void {
+    if (
+      op.kind === "convert" ||
+      (op.kind === "unary" && op.operation !== "abs" && op.operation !== "neg") ||
+      (op.kind === "binary" && op.operation !== "pmin" && op.operation !== "pmax")
+    ) {
+      this.simdFloatMath(op);
+      return;
+    }
+    const lanes = 128 / op.bits;
+    const type = `<${lanes} x ${op.bits === 32 ? "float" : "double"}>`;
+    const integer = `<${lanes} x i${op.bits}>`;
+    const mask = `<${lanes} x i1>`;
+    const read = (): string =>
+      this.emit(`bitcast <16 x i8> ${this.popType(VAL_V128, "SIMD float").v} to ${type}`);
+    const push = (value: string, valueType: string): void =>
+      this.push(this.emit(`bitcast ${valueType} ${value} to <16 x i8>`), VAL_V128);
+    const b = read();
+    if (op.kind === "compare") {
+      const a = read();
+      const result = this.emit(`fcmp ${op.operation} ${type} ${a}, ${b}`);
+      push(this.emit(`sext ${mask} ${result} to ${integer}`), integer);
+    } else if (op.kind === "unary") {
+      const bits = this.emit(`bitcast ${type} ${b} to ${integer}`);
+      const value =
+        op.operation === "abs"
+          ? op.bits === 32
+            ? "2147483647"
+            : "u0x7FFFFFFFFFFFFFFF"
+          : op.bits === 32
+            ? "2147483648"
+            : "u0x8000000000000000";
+      const constant = `<${Array.from({ length: lanes }, () => `i${op.bits} ${value}`).join(", ")}>`;
+      push(
+        this.emit(`${op.operation === "abs" ? "and" : "xor"} ${integer} ${bits}, ${constant}`),
+        integer,
+      );
+    } else {
+      const a = read();
+      // Pseudo-min/max select an input exactly, including its NaN payload
+      // and zero sign. An unordered comparison selects the left operand.
+      const condition = this.emit(
+        `fcmp olt ${type} ${op.operation === "pmin" ? b : a}, ${op.operation === "pmin" ? a : b}`,
+      );
+      push(this.emit(`select ${mask} ${condition}, ${type} ${b}, ${type} ${a}`), type);
+    }
+  }
+
   /** SIMD uses LLVM vectors with no host ISA requirement. LLVM legalizes the
    * operations for the selected target; lane order is WebAssembly byte order. */
   simd(c: WasmCursor): void {
     const sub = c.u32();
+    const floating = simdFloatOp(sub);
+    if (floating !== null) {
+      this.simdFloat(floating);
+      return;
+    }
     const vt = "<16 x i8>";
     const vector = (v: string, type: string): string =>
       type === vt ? v : this.emit(`bitcast ${vt} ${v} to ${type}`);
@@ -2683,7 +2874,7 @@ export function translateWasmModule(
   const mt = new ModuleTranslator(m, wasmSymbolPrefix(sha256), opts);
   mt.translate();
   const descriptor = mt.descriptor(sha256);
-  const decls = RUNTIME_DECLS.slice();
+  const decls = [...RUNTIME_DECLS, ...mt.intrinsicDecls];
   // Initial-exec: executables and their static runtime define it, so the
   // check is one thread-pointer-relative load, not a TLS lookup call.
   if (opts.boundsChecks)

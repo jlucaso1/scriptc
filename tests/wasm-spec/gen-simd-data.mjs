@@ -1,4 +1,4 @@
-// Generate minimal modules for the SIMD data movement and bitwise subset.
+// Generate minimal modules for the standardized SIMD128 instruction set.
 // No WAT assembler is needed. Keep the byte encodings visible for decoder tests.
 import { writeFileSync } from "node:fs";
 
@@ -22,7 +22,7 @@ const a = [0, 127, 128, 255, 15, 16, 31, 32, 63, 64, 1, 2, 3, 4, 5, 6];
 const b = [...a].reverse();
 const v = (bytes = a) => fd(12, ...bytes);
 const fixtures = [];
-function add(label, instructions, result = 127, width = 0, locals = [0], data = a) {
+function add(label, instructions, result = 127, width = 0, locals = [0], data = a, floatOutput = 0) {
   const body = [...locals, ...instructions, 11];
   const bytes = [0,97,115,109,1,0,0,0,
     ...section(1, [1,96,1,127,1,result]), ...section(3, [1,0]),
@@ -30,7 +30,7 @@ function add(label, instructions, result = 127, width = 0, locals = [0], data = 
     ...section(7,[2,...name("run"),0,0,...name("memory"),2,0]),
     ...section(10,[1,...u32(body.length),...body]),
     ...section(11,[1,0,...i32(32),11,...u32(data.length),...data])];
-  fixtures.push({ name: label, base64: Buffer.from(bytes).toString("base64"), width });
+  fixtures.push({ name: label, base64: Buffer.from(bytes).toString("base64"), width, ...(floatOutput ? {floatOutput} : {}) });
 }
 const output = (expr) => [...i32(0), ...expr, ...fd(11,0,0), ...i32(0)];
 for (let op = 0; op <= 10; op++) {
@@ -176,7 +176,80 @@ const q15a=laneBytes(16,[-32768n,-32768n,32767n,1n,-1n,16384n,-16384n,0n]);
 const q15b=laneBytes(16,[-32768n,32767n,32767n,16384n,16384n,16384n,16384n,32767n]);
 add("q15-round-and-saturate",output([...vectorLoad(32),...vectorLoad(48),...fd(0x82)]),127,0,[0],[...q15a,...q15b]);
 add("popcnt",output([...vectorLoad(32),...fd(0x62)]),127,0,[0],[0,1,2,3,7,15,31,63,127,128,255,170,85,254,192,16]);
+const floatSelectionOps = [...Array.from({length:12},(_,i)=>0x41+i),0xe0,0xe1,0xec,0xed,0xea,0xeb,0xf6,0xf7];
+const floatBits = (bits, values) => laneBytes(bits, values.map(BigInt));
+const fpPatterns = (bits) => bits === 32 ? [
+  ["zero", [0,0x80000000], [0x80000000,0]],
+  ["nan-left", [0x7fc01234,0x7f801234], [0x3f800000,0xbf800000]],
+  ["nan-right", [0x3f800000,0xbf800000], [0xffc01234,0xff801234]],
+  ["negative-nan", [0xffc01234,0xff801234], [0x7fc05678,0x7f805678]],
+  ["negative-subnormal", [0x80000001,0x807fffff,0x00800000,0x80800000], [1,0x007fffff,0x80800000,0x00800000]],
+  ["finite", [1,0x7f7fffff,0x7f800000,0xff800000], [0x80000001,0xff7fffff,0xff800000,0x7f800000]],
+] : [
+  ["zero", [0n,0x8000000000000000n], [0x8000000000000000n,0n]],
+  ["nan-left", [0x7ff8000000001234n,0x7ff0000000001234n], [0x3ff0000000000000n,0xbff0000000000000n]],
+  ["nan-right", [0x3ff0000000000000n,0xbff0000000000000n], [0xfff8000000001234n,0xfff0000000001234n]],
+  ["negative-nan", [0xfff8000000001234n,0xfff0000000001234n], [0x7ff8000000005678n,0x7ff0000000005678n]],
+  ["negative-subnormal", [0x8000000000000001n,0x800fffffffffffffn], [0x0010000000000000n,0x8010000000000000n]],
+  ["infinity", [0x7ff0000000000000n,0xfff0000000000000n], [0xfff0000000000000n,0x7ff0000000000000n]],
+  ["finite", [1n,0x7fefffffffffffffn], [0x8000000000000001n,0xffefffffffffffffn]],
+];
+for (const op of floatSelectionOps) {
+  const bits = op<=0x4c ? (op<0x47?32:64) : (op<0xec?32:64);
+  const unary = [0xe0,0xe1,0xec,0xed].includes(op);
+  for (const [variant, left, right] of fpPatterns(bits)) {
+    add(`float-select-${op}-${variant}`,output([...vectorLoad(32),...(unary?[]:vectorLoad(48)),...fd(op)]),127,0,[0],[...floatBits(bits,left),...floatBits(bits,right)]);
+  }
+}
+const numberBytes = (bits, values) => {
+  const bytes = Buffer.alloc(16);
+  for (let i = 0; i < 128/bits; i++) bits===32 ? bytes.writeFloatLE(values[i%values.length],4*i) : bytes.writeDoubleLE(values[i%values.length],8*i);
+  return [...bytes];
+};
+for (const bits of [32,64]) {
+  const base=bits===32?0xe4:0xf0;
+  const unary=bits===32?[0x67,0x68,0x69,0x6a,0xe3]:[0x74,0x75,0x7a,0x94,0xef];
+  const ops=[...unary,...Array.from({length:6},(_,i)=>base+i)];
+  const patterns=[...fpPatterns(bits).map(([name,a,b])=>[name,floatBits(bits,a),floatBits(bits,b)]),
+    ["ties",numberBytes(bits,[0.5,-0.5,1.5,-1.5]),numberBytes(bits,[2.5,-2.5,3.5,-3.5])],
+    ["ties-one",numberBytes(bits,[1.5,-1.5,2.5,-2.5]),numberBytes(bits,[0,0,0,0])],
+    ["negative-ties",numberBytes(bits,[-2.5,-3.5,-0.1,-1.1]),numberBytes(bits,[2,3,4,5])],
+    ["large",numberBytes(bits,[2**(bits===32?23:52)-0.5,2**(bits===32?23:52),-(2**(bits===32?23:52)),-0]),numberBytes(bits,[1,0,2,0])]];
+  for (const op of ops) for (const [variant,a,b] of patterns) {
+    add(`float-math-${op}-${variant}`,output([...vectorLoad(32),...(unary.includes(op)?[]:vectorLoad(48)),...fd(op)]),127,0,[0],[...a,...b],bits);
+  }
+}
+for (const op of [0x5e,0x5f,...Array.from({length:8},(_,i)=>0xf8+i)]) {
+  const bits=op===0x5e||op>=0xfc?64:32;
+  const fromInteger=op>=0xf8&&(op-0xf8)%4>=2;
+  const floatResult=op===0x5e?32:op===0x5f?64:fromInteger?bits:0;
+  const data=fromInteger?laneBytes(32,[-2147483648n,2147483647n,-1n,0n]):null;
+  const patterns=fromInteger?[["integers",data],["integers-high",laneBytes(32,[-1n,0n,16777217n,-2147483647n])]]:[
+    ...fpPatterns(bits).map(([name,a])=>[name,floatBits(bits,a)]),
+    ["range",numberBytes(bits,[-2147483648,2147483648,4294967296,-1])],
+    ["fraction",numberBytes(bits,[-0.5,0.5,-2147483649,4294967295])],
+    ["range-neighbors",numberBytes(bits,[-2147483904,2147483520,4294967040,4294967296])],
+    ["precision",numberBytes(bits,[16777217,1.0000000596046448,2**-149,-0])],
+  ];
+  for (const [variant,data] of patterns) add(`float-convert-${op}-${variant}`,output([...vectorLoad(32),...fd(op)]),127,0,[0],data,floatResult);
+}
 writeFileSync(new URL("./corpus/simd-data.json",import.meta.url),JSON.stringify(fixtures,null,2)+"\n");
 const inputs = fixtures.map((f)=>`  Buffer.from("${f.base64}", "base64"),`).join("\n");
-writeFileSync(new URL("../corpus/webassembly-simd-data/main.mjs",import.meta.url),`// Generated by tests/wasm-spec/gen-simd-data.mjs. Each module has scalar exports.\nconst modules = [\n${inputs}\n];\nconst names = ${JSON.stringify(fixtures.map(f=>f.name))};\nconst widths = ${JSON.stringify(fixtures.map(f=>f.width))};\nfor (let i = 0; i < modules.length; i++) {\n  const bytes = modules[i];\n  console.log(names[i], WebAssembly.validate(bytes));\n  const module = new WebAssembly.Module(bytes);\n  const addresses = widths[i] < 0 ? [0, 1, 7, 8, 15, 16, 31, 32, 63, 64, 65, 127, 128, -1, -2147483648, 2147483647] : widths[i] > 0 ? [32, 33, 65536 - widths[i], 65537 - widths[i], -1] : [32, 0, -129, 2147483647];\n  for (const address of addresses) {\n    const x = new WebAssembly.Instance(module).exports;\n    try {\n      console.log(address, String(x.run(address)), new Uint8Array(x.memory.buffer, 0, 64).join(","));\n    } catch (error) {\n      console.log(address, error.name, error.message, new Uint8Array(x.memory.buffer, 65504, 32).join(","));\n    }\n  }\n}\n`);
+writeFileSync(new URL("../corpus/webassembly-simd-data/main.mjs",import.meta.url),`// Generated by tests/wasm-spec/gen-simd-data.mjs. Each module has scalar exports.\nconst modules = [\n${inputs}\n];\nconst names = ${JSON.stringify(fixtures.map(f=>f.name))};\nconst widths = ${JSON.stringify(fixtures.map(f=>f.width))};\nconst floatOutputs = ${JSON.stringify(fixtures.map(f=>f.floatOutput||0))};\nlet seed = 0x1679;\nfunction randomByte() { seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5; return seed & 255; }\nfor (let i = 0; i < modules.length; i++) {\n  const bytes = modules[i];\n  console.log(names[i], WebAssembly.validate(bytes));\n  const module = new WebAssembly.Module(bytes);\n  const addresses = widths[i] < 0 ? [0, 1, 7, 8, 15, 16, 31, 32, 63, 64, 65, 127, 128, -1, -2147483648, 2147483647] : widths[i] > 0 ? [32, 33, 65536 - widths[i], 65537 - widths[i], -1] : [32, 0, -129, 2147483647];\n  for (const address of addresses) {\n    const x = new WebAssembly.Instance(module).exports;\n    try {\n      if (widths[i] === 0 && (address === 0 || address === 2147483647)) {\n        const data = new Uint8Array(x.memory.buffer, 32, 32);\n        for (let byte = 0; byte < data.length; byte++) data[byte] = randomByte();\n      }\n      const result = x.run(address);
+      const bits = floatOutputs[i];
+      if (bits) {
+        const words = new Uint32Array(x.memory.buffer, 0, 4);
+        for (let lane = 0; lane < 128 / bits; lane++) {
+          const highIndex = bits === 32 ? lane : 2 * lane + 1;
+          const high = words[highIndex];
+          const exponent = bits === 32 ? 0x7f800000 : 0x7ff00000;
+          const fraction = bits === 32 ? 0x007fffff : 0x000fffff;
+          if ((high & exponent) === exponent && ((high & fraction) !== 0 || (bits === 64 && words[2 * lane] !== 0))) {
+            if ((high & (bits === 32 ? 0x00400000 : 0x00080000)) === 0) throw new Error("Signaling NaN arithmetic result");
+            words[highIndex] = bits === 32 ? 0x7fc00000 : 0x7ff80000;
+            if (bits === 64) words[2 * lane] = 0;
+          }
+        }
+      }
+      console.log(address, String(result), new Uint8Array(x.memory.buffer, 0, 64).join(","));\n    } catch (error) {\n      console.log(address, error.name, error.message, new Uint8Array(x.memory.buffer, 65504, 32).join(","));\n    }\n  }\n}\n`);
 console.log(`Generated ${fixtures.length} SIMD modules`);
