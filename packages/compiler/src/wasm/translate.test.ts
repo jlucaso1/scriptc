@@ -279,12 +279,16 @@ describe("SIMD data movement and bitwise subset", () => {
   );
 
   test("keeps arithmetic, relaxed SIMD and the vector ABI outside the supported subset", () => {
-    const bytes = Buffer.from(simdFixtures.find((f) => f.name === "bitwise-78")!.base64, "base64");
-    const opcode = bytes.indexOf(Buffer.from([253, 78]));
-    bytes[opcode + 1] = 110; // i8x16.add has the same stack effect as v128.and.
+    const vector = [253, 12, ...new Array<number>(16).fill(0)];
+    const instructions = [0, ...vector, ...vector, 253, 228, 1, 253, 83, 11]; // f32x4.add, then any_true
+    const bytes = wasmModule(
+      [1, 1, 96, 0, 1, 127],
+      [3, 1, 0],
+      [10, 1, instructions.length, ...instructions],
+    );
     expect(v8Validate(bytes)).toBe(true);
     expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 110");
+    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 228");
     const abi = Buffer.from(
       "AGFzbQEAAAABBQFgAAF7AwIBAAoWA RQA/QwAAAAAAAAAAAAAAAAAAAAACw==".replaceAll(" ", ""),
       "base64",
@@ -339,7 +343,7 @@ describe("SIMD data movement and bitwise subset", () => {
     expect(
       inventory.filter((entry) => entry.translated).map((entry) => Number(entry.opcode)),
     ).toEqual([...exercised].sort((a, b) => a - b));
-    expect(exercised.size).toBe(96);
+    expect(exercised.size).toBe(139);
   });
 
   test.each([0x23, 0xd6, 0x63, 0x64, 0xc3, 0xc4])(
@@ -366,6 +370,19 @@ describe("SIMD data movement and bitwise subset", () => {
       expect(analyzeWasm(bytes).status).toBe("invalid");
     },
   );
+
+  test.each([0x6b, 0x8c, 0xad, 0xcb])("rejects a non-i32 shift count for opcode %i", (sub) => {
+    const vector = [253, 12, ...new Array<number>(16).fill(0)];
+    const op = sub < 128 ? [253, sub] : [253, sub, 1];
+    const instructions = [0, ...vector, 66, 0, ...op, 253, 83, 11];
+    const bytes = wasmModule(
+      [1, 1, 96, 0, 1, 127],
+      [3, 1, 0],
+      [10, 1, instructions.length, ...instructions],
+    );
+    expect(v8Validate(bytes)).toBe(false);
+    expect(analyzeWasm(bytes).status).toBe("invalid");
+  });
 
   test("SIMD stores check the full range even with guard pages", () => {
     const bytes = Buffer.from(simdFixtures.find((f) => f.name === "store-param")!.base64, "base64");

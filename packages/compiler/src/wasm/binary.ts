@@ -1875,9 +1875,10 @@ class FunctionValidator {
     const sub = r.u32();
     const integer = simdIntegerOp(sub);
     if (integer !== null) {
+      if (integer.kind === "shift") this.popExpect(I32);
       this.popExpect(V128);
-      if (integer.kind === "compare") this.popExpect(V128);
-      this.push(integer.kind === "compare" ? V128 : I32);
+      if (integer.kind === "compare" || integer.kind === "binary") this.popExpect(V128);
+      this.push(integer.kind === "all-true" || integer.kind === "bitmask" ? I32 : V128);
       return;
     }
     if (sub > 34 && (sub < 77 || sub > 93)) {

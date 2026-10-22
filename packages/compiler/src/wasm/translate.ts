@@ -2099,12 +2099,38 @@ class FunctionTranslator {
       const lanes = 128 / integer.bits;
       const type = `<${lanes} x i${integer.bits}>`;
       const maskType = `<${lanes} x i1>`;
+      const count = integer.kind === "shift" ? this.popType(VAL_I32, "SIMD shift count").v : "";
       const b = vector(pop(), type);
       if (integer.kind === "compare") {
         const a = vector(pop(), type);
         const mask = this.emit(`icmp ${integer.operation} ${type} ${a}, ${b}`);
         // WebAssembly comparisons return all bits set in each true lane.
         push(this.emit(`sext ${maskType} ${mask} to ${type}`), type);
+      } else if (integer.kind === "shift") {
+        // WebAssembly masks counts modulo lane width. LLVM does not: an
+        // oversized count would produce poison, even on masking CPUs.
+        let masked = this.emit(`and i32 ${count}, ${integer.bits - 1}`);
+        if (integer.bits < 32) masked = this.emit(`trunc i32 ${masked} to i${integer.bits}`);
+        if (integer.bits > 32) masked = this.emit(`zext i32 ${masked} to i${integer.bits}`);
+        const counts = splat(masked, `i${integer.bits}`, lanes);
+        push(this.emit(`${integer.operation} ${type} ${b}, ${counts}`), type);
+      } else if (integer.kind === "unary") {
+        const negated = this.emit(`sub ${type} zeroinitializer, ${b}`);
+        if (integer.operation === "neg") push(negated, type);
+        else {
+          const negative = this.emit(`icmp slt ${type} ${b}, zeroinitializer`);
+          push(this.emit(`select ${maskType} ${negative}, ${type} ${negated}, ${type} ${b}`), type);
+        }
+      } else if (integer.kind === "binary") {
+        const a = vector(pop(), type);
+        if (integer.operation.startsWith("min") || integer.operation.startsWith("max")) {
+          const condition = `${integer.operation.endsWith("_s") ? "s" : "u"}${integer.operation.startsWith("min") ? "lt" : "gt"}`;
+          const pick = this.emit(`icmp ${condition} ${type} ${a}, ${b}`);
+          push(this.emit(`select ${maskType} ${pick}, ${type} ${a}, ${type} ${b}`), type);
+        } else {
+          // No nsw/nuw flags: these operations wrap at the lane width.
+          push(this.emit(`${integer.operation} ${type} ${a}, ${b}`), type);
+        }
       } else {
         const mask = this.emit(
           `icmp ${integer.kind === "all-true" ? "ne" : "slt"} ${type} ${b}, zeroinitializer`,
