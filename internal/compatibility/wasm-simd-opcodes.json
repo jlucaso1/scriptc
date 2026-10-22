@@ -622,22 +622,22 @@
   {
     "opcode": "0x7c",
     "instruction": "i16x8.extadd_pairwise_i8x16_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x7d",
     "instruction": "i16x8.extadd_pairwise_i8x16_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x7e",
     "instruction": "i32x4.extadd_pairwise_i16x8_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x7f",
     "instruction": "i32x4.extadd_pairwise_i16x8_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x80",
@@ -677,22 +677,22 @@
   {
     "opcode": "0x87",
     "instruction": "i16x8.extend_low_i8x16_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x88",
     "instruction": "i16x8.extend_high_i8x16_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x89",
     "instruction": "i16x8.extend_low_i8x16_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x8a",
     "instruction": "i16x8.extend_high_i8x16_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x8b",
@@ -777,22 +777,22 @@
   {
     "opcode": "0x9c",
     "instruction": "i16x8.extmul_low_i8x16_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x9d",
     "instruction": "i16x8.extmul_high_i8x16_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x9e",
     "instruction": "i16x8.extmul_low_i8x16_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0x9f",
     "instruction": "i16x8.extmul_high_i8x16_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xa0",
@@ -817,22 +817,22 @@
   {
     "opcode": "0xa7",
     "instruction": "i32x4.extend_low_i16x8_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xa8",
     "instruction": "i32x4.extend_high_i16x8_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xa9",
     "instruction": "i32x4.extend_low_i16x8_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xaa",
     "instruction": "i32x4.extend_high_i16x8_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xab",
@@ -887,27 +887,27 @@
   {
     "opcode": "0xba",
     "instruction": "i32x4.dot_i16x8_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xbc",
     "instruction": "i32x4.extmul_low_i16x8_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xbd",
     "instruction": "i32x4.extmul_high_i16x8_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xbe",
     "instruction": "i32x4.extmul_low_i16x8_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xbf",
     "instruction": "i32x4.extmul_high_i16x8_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xc0",
@@ -932,22 +932,22 @@
   {
     "opcode": "0xc7",
     "instruction": "i64x2.extend_low_i32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xc8",
     "instruction": "i64x2.extend_high_i32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xc9",
     "instruction": "i64x2.extend_low_i32x4_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xca",
     "instruction": "i64x2.extend_high_i32x4_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xcb",
@@ -1012,22 +1012,22 @@
   {
     "opcode": "0xdc",
     "instruction": "i64x2.extmul_low_i32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xdd",
     "instruction": "i64x2.extmul_high_i32x4_s",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xde",
     "instruction": "i64x2.extmul_low_i32x4_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xdf",
     "instruction": "i64x2.extmul_high_i32x4_u",
-    "translated": false
+    "translated": true
   },
   {
     "opcode": "0xe0",

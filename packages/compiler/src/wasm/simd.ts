@@ -1,7 +1,17 @@
 /** Integer SIMD metadata shared by stack validation and LLVM lowering. */
 export interface SimdIntegerOp {
   bits: number;
-  kind: "compare" | "all-true" | "bitmask" | "shift" | "unary" | "binary";
+  kind:
+    | "compare"
+    | "all-true"
+    | "bitmask"
+    | "shift"
+    | "unary"
+    | "binary"
+    | "extend"
+    | "extmul"
+    | "pairwise"
+    | "dot";
   operation: string;
 }
 
@@ -37,5 +47,17 @@ export function simdIntegerOp(sub: number): SimdIntegerOp | null {
     if (group < 3 && minmax >= 0 && minmax < 4)
       return { bits, kind: "binary", operation: ["min_s", "min_u", "max_s", "max_u"][minmax]! };
   }
+  for (let group = 0; group < 3; group++) {
+    const bits = 16 << group;
+    const extend = sub - (0x87 + 0x20 * group);
+    if (extend >= 0 && extend < 4)
+      return { bits, kind: "extend", operation: ["low_s", "high_s", "low_u", "high_u"][extend]! };
+    const multiply = sub - (0x9c + 0x20 * group);
+    if (multiply >= 0 && multiply < 4)
+      return { bits, kind: "extmul", operation: ["low_s", "high_s", "low_u", "high_u"][multiply]! };
+  }
+  if (sub >= 0x7c && sub <= 0x7f)
+    return { bits: sub < 0x7e ? 16 : 32, kind: "pairwise", operation: sub % 2 === 0 ? "s" : "u" };
+  if (sub === 0xba) return { bits: 32, kind: "dot", operation: "s" };
   return null;
 }

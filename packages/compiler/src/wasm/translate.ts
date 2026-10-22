@@ -2100,8 +2100,44 @@ class FunctionTranslator {
       const type = `<${lanes} x i${integer.bits}>`;
       const maskType = `<${lanes} x i1>`;
       const count = integer.kind === "shift" ? this.popType(VAL_I32, "SIMD shift count").v : "";
-      const b = vector(pop(), type);
-      if (integer.kind === "compare") {
+      const widening =
+        integer.kind === "extend" ||
+        integer.kind === "extmul" ||
+        integer.kind === "pairwise" ||
+        integer.kind === "dot";
+      const inputType = widening ? `<${2 * lanes} x i${integer.bits / 2}>` : type;
+      const b = vector(pop(), inputType);
+      if (widening) {
+        const halfType = `<${lanes} x i${integer.bits / 2}>`;
+        const signed = integer.operation.endsWith("s");
+        const widen = (value: string, start: number, stride: number): string => {
+          const indices: string[] = [];
+          for (let i = 0; i < lanes; i++) indices.push(`i32 ${start + i * stride}`);
+          const half = this.emit(
+            `shufflevector ${inputType} ${value}, ${inputType} poison, <${lanes} x i32> <${indices.join(", ")}>`,
+          );
+          return this.emit(`${signed ? "sext" : "zext"} ${halfType} ${half} to ${type}`);
+        };
+        if (integer.kind === "pairwise") {
+          const even = widen(b, 0, 2),
+            odd = widen(b, 1, 2);
+          push(this.emit(`add ${type} ${even}, ${odd}`), type);
+        } else if (integer.kind === "dot") {
+          const a = vector(pop(), inputType);
+          const even = this.emit(`mul ${type} ${widen(a, 0, 2)}, ${widen(b, 0, 2)}`);
+          const odd = this.emit(`mul ${type} ${widen(a, 1, 2)}, ${widen(b, 1, 2)}`);
+          // The pair sum wraps, including (-32768 * -32768) twice.
+          push(this.emit(`add ${type} ${even}, ${odd}`), type);
+        } else {
+          const start = integer.operation.startsWith("high") ? lanes : 0;
+          const right = widen(b, start, 1);
+          if (integer.kind === "extend") push(right, type);
+          else {
+            const left = widen(vector(pop(), inputType), start, 1);
+            push(this.emit(`mul ${type} ${left}, ${right}`), type);
+          }
+        }
+      } else if (integer.kind === "compare") {
         const a = vector(pop(), type);
         const mask = this.emit(`icmp ${integer.operation} ${type} ${a}, ${b}`);
         // WebAssembly comparisons return all bits set in each true lane.
