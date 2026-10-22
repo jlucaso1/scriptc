@@ -8212,7 +8212,7 @@ export function lowerDestructuringAssign(
 /** V8's spelling of a destructuring RHS in its TypeError message
  * ("Cannot destructure 'a' as it is undefined.") — plain identifiers
  * spell their name (parens unwrap), `this`, property chains and
- * identifier or numeric element reads spell their source, awaited and
+ * identifier, numeric or string element reads spell their source, awaited and
  * yielded values spell "(intermediate value)", and calls append an
  * ellipsis to a supported callee spelling. Other CallPrinter forms keep
  * a fence. */
@@ -8245,6 +8245,9 @@ function destrSpellingOf(rhs: ts.Expression): string | null {
     if (base === null) return null;
     if (ts.isIdentifier(key)) return `${base}[${key.text}]`;
     if (ts.isNumericLiteral(key)) return `${base}[${String(Number(key.text))}]`;
+    // V8 prints string keys as a property read, using their decoded text,
+    // even when the key is not an identifier (e.g. o["a.b"] reads "o.a.b").
+    if (ts.isStringLiteral(key)) return `${base}.${key.text}`;
     return null;
   }
   if (ts.isCallExpression(e) && !e.questionDotToken) {
