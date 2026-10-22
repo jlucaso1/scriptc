@@ -1,8 +1,6 @@
-// Narrowing filters re-tag ONLY what the runtime test proved: an inferred
-// single-arm predicate or filter(Boolean). Everything else stays fenced —
-// multi-arm targets (the re-tag doesn't exist), hand-written predicates
-// (unchecked assertions), and predicate VALUES (their annotation is
-// written by definition).
+// Inferred multi-arm narrowing keeps its refusal. Written predicates and
+// predicate values now use checked extraction instead of being refused.
+// The successful calls below also guard against diagnostic cascades.
 const xs: (string | number | undefined)[] = ["a", 1, undefined];
 
 // Multi-arm narrowing: string | number is not a single arm.

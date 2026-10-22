@@ -5867,6 +5867,9 @@ function inferredOptionalRecordType(
   declared: IrType,
   actual: IrType,
 ): IrType {
+  const viewSymbol = ts.isIdentifier(decl.name) ? lowerer.resolveValueSymbol(decl.name) : null;
+  const view = viewSymbol ? lowerer.filterViewBindings.get(viewSymbol) : null;
+  if (view && typeEquals(view, actual)) return actual;
   if (decl.type || hasJsTypeAnnotation(decl)) return declared;
   const symbol = ts.isIdentifier(decl.name) ? lowerer.resolveValueSymbol(decl.name) : undefined;
   if (symbol && lowerer.runtimeOptionalRecordsKeptDeclared.has(symbol)) return declared;
@@ -8977,12 +8980,17 @@ function lowerAssignTargetInto(
         if (obj.type.kind === "record") {
           const recv = lowerer.declareHiddenLocal("%dtRecv", obj.type);
           out.push({ kind: "varDecl", localId: recv.id, init: obj, loc });
-          const value = lowerer.coerceInto(blame, valueOf(field.type), field.type);
+          const stored = lowerer.shapes
+            .get(obj.type.shapeId)
+            ?.fields.find((f) => f.name === field.name);
+          if (!stored)
+            lowerer.unsupported("SC1031", t, "destructuring assignment to an absent stored field");
+          const value = lowerer.coerceInto(blame, valueOf(stored.type), stored.type);
           out.push({
             kind: "recordSet",
             obj: { kind: "varRef", localId: recv.id, type: obj.type, loc },
-            shapeId: recvT.shapeId,
-            field: field.name,
+            shapeId: obj.type.shapeId,
+            field: stored.name,
             value,
             loc,
           });

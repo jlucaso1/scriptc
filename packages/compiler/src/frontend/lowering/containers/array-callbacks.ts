@@ -142,6 +142,11 @@ export function lowerArrayHofCall(
     callbackSite(fast ?? fnArg),
     fast?.type ?? null,
     present,
+    method === "filter" &&
+      !booleanFilter &&
+      !typeEquals(outElem, elem) &&
+      ((!ts.isArrowFunction(argNode) && !ts.isFunctionExpression(argNode)) ||
+        argNode.type !== undefined),
   );
   const resultType: IrType = method === "map" || method === "filter" ? arrayOf(outElem) : VOID;
   return {
@@ -153,10 +158,10 @@ export function lowerArrayHofCall(
   };
 }
 
-/** The checker-selected element of a filter result, with the same trust
- * boundary as the historical narrowing filter: an inferred inline type
- * predicate may prove one source arm; a written predicate annotation may
- * not. Boolean is safe when every discarded arm is a nullish unit. */
+/** The checker-selected filter result, retaining tuple storage when its
+ * fields refine. Written predicates use checked extraction for a changed
+ * element layout. Inferred single-arm predicates keep their proven path;
+ * Boolean is safe when every discarded arm is a nullish unit. */
 function filterResultElem(
   lowerer: Lowerer,
   call: ts.CallExpression,
@@ -185,34 +190,32 @@ function filterResultElem(
     if (contextual?.kind === "array" && typeEquals(contextual.elem, elem)) outElem = elem;
   }
   if (typeEquals(outElem, elem)) return elem;
+  const view = lowerer.filterViewCalls.get(call);
+  if (
+    view?.kind === "array" &&
+    (typeEquals(view.elem, elem) ||
+      (valueT.kind === "union" && lowerer.armTag(valueT.unionId, view.elem) >= 0))
+  )
+    return view.elem;
 
   const annotateEscape =
     "keep the receiver's element type instead — annotate the callback's return ': boolean' " +
     "(the checker then skips the predicate) or annotate the result with the receiver's own " +
     "element type — and narrow the elements after";
-  if (!booleanFilter) {
-    if (!ts.isArrowFunction(argNode) && !ts.isFunctionExpression(argNode)) {
-      lowerer.unsupported(
-        "SC1090",
-        argNode,
-        `narrowing '.filter' through a callback VALUE (only an inline callback whose predicate ` +
-          `the checker inferred can re-tag — ${annotateEscape})`,
-      );
-    }
-    if (argNode.type) {
-      lowerer.unsupported(
-        "SC1090",
-        argNode,
-        `narrowing '.filter' with a hand-written type predicate (a written 'x is T' is an ` +
-          `unchecked assertion nothing validates at runtime — ${annotateEscape})`,
-      );
-    }
-  }
+  const written =
+    (!ts.isArrowFunction(argNode) && !ts.isFunctionExpression(argNode)) ||
+    argNode.type !== undefined;
   const classRefinement =
     !booleanFilter && outElem.kind === "object" && canAssertClassValue(lowerer, valueT, outElem);
   if (
     !classRefinement &&
-    (valueT.kind !== "union" || lowerer.armTag(valueT.unionId, outElem) < 0)
+    (valueT.kind !== "union" ||
+      (outElem.kind === "union"
+        ? !written ||
+          !lowerer.unions
+            .get(outElem.unionId)
+            ?.arms.every((arm) => lowerer.armTag(valueT.unionId, arm) >= 0)
+        : lowerer.armTag(valueT.unionId, outElem) < 0))
   ) {
     const multiArm = outElem.kind === "union";
     lowerer.unsupported(
@@ -502,13 +505,22 @@ function arrayHofHelper(
   site = "",
   fastT: CallbackType | null = null,
   present = false,
+  checkedFilter = false,
 ): string {
-  const key = `${method}:${typeKey(elem)}:${typeKey(fnRet)}:${arity}:${typeKey(outElem)}${site}${fastT ? ":split" : ""}${present ? ":present" : ""}`;
+  const key = `${method}:${typeKey(elem)}:${typeKey(fnRet)}:${arity}:${typeKey(outElem)}${site}${fastT ? ":split" : ""}${present ? ":present" : ""}${checkedFilter ? ":checked" : ""}`;
   const existing = lowerer.arrHofHelpers.get(key);
   if (existing) return existing;
   const name = `%arr.${method}.${lowerer.arrHofHelpers.size}`;
   lowerer.arrHofHelpers.set(key, name);
-  lowerer.arrHofInfo.set(name, { method, elem, fnRet, arity, outElem, present, split: !!fastT });
+  lowerer.arrHofInfo.set(name, {
+    method,
+    elem,
+    fnRet,
+    arity,
+    outElem,
+    present,
+    split: !!fastT,
+  });
   const fn = buildArrayHofFn(
     lowerer,
     name,
@@ -520,6 +532,7 @@ function arrayHofHelper(
     outElem,
     fastT,
     present,
+    checkedFilter,
   );
   lowerer.liftedFns.push(fastT ? withFastCallback(fn, fastT, elem) : fn);
   return name;
@@ -696,12 +709,26 @@ function filterRetainedValue(
   elem: IrType,
   outElem: IrType,
   loc: SrcLoc,
+  checked = false,
 ): IrExpr {
   if (typeEquals(outElem, elem)) return v;
   const classView =
     outElem.kind === "object" ? checkedClassAssertion(lowerer, v, outElem, loc) : null;
   if (classView !== null) return classView;
   if (v.type.kind !== "union") return v;
+  if (outElem.kind === "union") {
+    const fromId = v.type.unionId;
+    const trappable = new Set<number>();
+    lowerer.unions.get(fromId)!.arms.forEach((arm, tag) => {
+      if (lowerer.armTag(outElem.unionId, arm) < 0) trappable.add(tag);
+    });
+    const helper = lowerer.unionRetagHelper(fromId, outElem.unionId, loc, trappable);
+    if (helper) return { kind: "call", callee: helper, args: [v], type: outElem, loc };
+  }
+  if (checked) {
+    const helper = lowerer.narrowedArmHelper(v.type.unionId, outElem, loc);
+    if (helper) return lowerer.checkedNarrowCall(helper, v, outElem, loc);
+  }
   return {
     kind: "unionNarrow",
     unionId: v.type.unionId,
@@ -734,6 +761,7 @@ function buildArrayHofFn(
   outElem: IrType,
   fastT: CallbackType | null = null,
   present = false,
+  checkedFilter = false,
 ): IrFunction {
   const arrT = arrayOf(elem);
   const valueT = callbackValueType(lowerer, elem, present);
@@ -917,7 +945,14 @@ function buildArrayHofFn(
       { id: "v.0", name: "v", type: valueT, mutable: false },
     );
     returnType = outT;
-    const retained = filterRetainedValue(lowerer, varRef("v.0", valueT, loc), elem, outElem, loc);
+    const retained = filterRetainedValue(
+      lowerer,
+      varRef("v.0", valueT, loc),
+      elem,
+      outElem,
+      loc,
+      checkedFilter,
+    );
     body = [
       {
         kind: "varDecl",
@@ -2699,7 +2734,15 @@ export function lowerTuplePredicateCall(
             lowerer,
             out,
             { kind: "arrIntrinsic", method: "length", receiver: out, args: [], type: F64, loc },
-            filterRetainedValue(lowerer, v, elem, outElem, loc),
+            filterRetainedValue(
+              lowerer,
+              v,
+              elem,
+              outElem,
+              loc,
+              (!ts.isArrowFunction(argNode) && !ts.isFunctionExpression(argNode)) ||
+                argNode.type !== undefined,
+            ),
             outElem,
             loc,
           );

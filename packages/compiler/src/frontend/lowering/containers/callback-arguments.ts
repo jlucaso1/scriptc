@@ -1,3 +1,4 @@
+import { filterTupleView } from "../filter-views.js";
 import * as ts from "../../ts7/adapter.js";
 import type { Lowerer } from "../lowerer.js";
 import { isJsSourceFile, locOf } from "../../program.js";
@@ -115,7 +116,6 @@ export function lowerArrayCallback(
         expected === undefined ||
         expected.kind === "dyn" ||
         !ts.isIdentifier(param.name) ||
-        param.type ||
         param.initializer ||
         param.dotDotDotToken
       ) {
@@ -125,6 +125,11 @@ export function lowerArrayCallback(
       const untyped = (checkerType.flags & (ts.TypeFlags.Any | ts.TypeFlags.Unknown)) !== 0;
       const raw = untyped ? null : lowerer.mapTypeOf(checkerType);
       const mapped = raw ? lowerer.runtimeOptionalBindingType(param.name, raw) : null;
+      const stored =
+        expected.kind === "union" && lowerer.armTag(expected.unionId, UNDEFINED_T) >= 0
+          ? lowerer.stripUndefinedArm(expected)
+          : expected;
+      if (param.type && (!mapped || !filterTupleView(lowerer, stored, mapped))) return;
       if (
         untyped
           ? !bindUntyped
@@ -270,7 +275,11 @@ function runtimeOptionalPairVariant(lowerer: Lowerer, expected: IrType, mapped: 
     t.kind === "union" && lowerer.armTag(t.unionId, UNDEFINED_T) >= 0
       ? lowerer.stripUndefinedArm(t)
       : t;
-  return lowerer.isRuntimeOptionalRecordVariant(strip(expected), strip(mapped));
+  return (
+    lowerer.isRuntimeOptionalRecordVariant(strip(expected), strip(mapped)) ||
+    (!typeEquals(strip(expected), strip(mapped)) &&
+      filterTupleView(lowerer, strip(expected), strip(mapped)))
+  );
 }
 
 /** A native closure for the ambient Boolean callback. Reifying the
