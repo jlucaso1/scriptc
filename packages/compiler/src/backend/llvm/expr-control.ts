@@ -30,7 +30,12 @@ export function emitControlExpr(
       const v = host.emitExpr(e.value);
       const first = e.firstProp !== undefined ? host.cstr(e.firstProp) : "null";
 
-      const helper = host.dyn.dynDestrCheckHelper();
+      // Embedded NULs need a length-aware spelling writer. Keep the ordinary
+      // helper unchanged for existing source expressions.
+      const spellingLength = e.spelling.includes("\0")
+        ? Buffer.byteLength(e.spelling, "utf8")
+        : undefined;
+      const helper = host.dyn.dynDestrCheckHelper(spellingLength);
       B.line(`call void @${helper}(ptr ${v.name}, ptr ${host.cstr(e.spelling)}, ptr ${first})`);
       host.emitPendingCheck();
       return v;
@@ -510,9 +515,13 @@ export function emitOptionalChainReceiver(
     // pointer itself, through a private stack box when the union's own
     // representation is boxed (emitUnionProjection's form).
     const owner = host.emitReadReceiver(e.receiver.obj);
-    const { ptr } = host.classFieldPtr(owner.name, e.receiver.className, e.receiver.field);
-    const p = B.tmp();
-    B.line(`${p} = load ptr, ptr ${ptr}${host.fieldAliasAttachment(ptr)}`);
+    const { ptr } = host.classFieldPtr(
+      owner.name,
+      e.receiver.className,
+      e.receiver.field,
+      "compressed",
+    );
+    const p = host.loadRef(ptr);
     r = {
       name: host.nullableUnions.get(def.id) ? p : host.stackNullableBox(p, nullableField),
       type: e.receiver.type,

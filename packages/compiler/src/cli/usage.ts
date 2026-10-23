@@ -31,10 +31,11 @@ Options:
                      (native-link-info implies --emit=obj and never links;
                      diagnostics prints the versioned JSON diagnostics
                      envelope for build and coverage)
-      --fail-on <blockers|divergences>
+      --fail-on <blockers|divergences|dynamic>
                      coverage only: exit 1 when the entry path has blockers
                      (a build would fail), or also when it has Node
-                     divergences
+                     divergences, or also when it has likely-hot functions
+                     that use untyped values (SC6101)
       --backend <b>  code generator (llvm)
       --optimization <release|dev|speed>
                      native optimization posture (default: release/-O2). dev
@@ -76,9 +77,9 @@ Options:
       --npm-static <pkg[,pkg…]|auto>
                      compile the named npm packages' shipped JS statically as
                      program modules (repeatable; "auto" opts in every eligible
-                     direct import: own .d.ts, unminified JS, no build-transform
-                     markers; "pkg..." also names every package pkg depends
-                     on). Packages that fail preflight are refused with a
+                     direct import: own .d.ts, no build-transform markers;
+                     "pkg..." also names every package pkg depends on).
+                     Packages that fail preflight are refused with a
                      diagnostic. Eligible dependencies compile automatically.
       --provenance-sources
                      EXPERIMENTAL: compile npm dependencies from their
@@ -100,6 +101,9 @@ Options:
                      values and the bindings, fields, functions, classes and
                      modules the dynamic tier would take over, with the
                      refusal behind each; a name shows only that unit's chain
+      --no-dynamic-tier-warning
+                     build and coverage: leave out SC6101, the warning that
+                     names likely-hot functions that use untyped values
       --wasm <file.wasm>
                      coverage only: report a WebAssembly module the program
                      loads whose path its sources do not spell (repeatable;
@@ -131,6 +135,7 @@ export const CLI_OPTIONS = {
   "external-types": { type: "string", multiple: true },
   tier: { type: "string" },
   "explain-dynamic": { type: "string" },
+  "dynamic-tier-warning": { type: "boolean", default: true },
   wasm: { type: "string", multiple: true },
   lib: { type: "boolean", default: false },
   profile: { type: "string" },

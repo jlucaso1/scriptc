@@ -1,0 +1,29 @@
+any-destructuring-rhs-spelling.ts:3:21 - error SC1031: destructuring declaration from an `any` source whose expression spelling is unsupported (use a variable, ordinary property chain, or ordinary call) is not supported yet
+
+  2 | function unsupported(table: any, key: string): void {
+  3 |   const { first } = table[key + "suffix"];
+    |                     ^~~~~~~~~~~~~~~~~~~~~
+  4 |   const { second } = table?.["a.b"];
+
+any-destructuring-rhs-spelling.ts:4:22 - error SC1031: destructuring declaration from an `any` source whose expression spelling is unsupported (use a variable, ordinary property chain, or ordinary call) is not supported yet
+
+  3 |   const { first } = table[key + "suffix"];
+  4 |   const { second } = table?.["a.b"];
+    |                      ^~~~~~~~~~~~~~
+  5 |   const { third } = table[`a.b`];
+
+any-destructuring-rhs-spelling.ts:5:21 - error SC1031: destructuring declaration from an `any` source whose expression spelling is unsupported (use a variable, ordinary property chain, or ordinary call) is not supported yet
+
+  4 |   const { second } = table?.["a.b"];
+  5 |   const { third } = table[`a.b`];
+    |                     ^~~~~~~~~~~~
+  6 |   console.log(first, second, third);
+
+any-destructuring-rhs-spelling.ts:6:15 - error SC2004: uses of 'first' inherit the blocker on its declaration
+
+  5 |   const { third } = table[`a.b`];
+  6 |   console.log(first, second, third);
+    |               ^~~~~
+  7 | }
+
+  hint: the declaration of 'first' did not compile — fix the diagnostic reported there and these sites clear with it
