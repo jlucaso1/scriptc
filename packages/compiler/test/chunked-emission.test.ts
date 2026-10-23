@@ -23,6 +23,7 @@ const PROGRAMS = [
   "5702-publish-candidate-buffers.ts",
   "7321-speculative-loop-bail-sites.ts",
   "7360-worker-typed-records.ts",
+  "any-destructuring-string-rhs.ts",
   "node24-text-utilities-coercion.js",
 ];
 

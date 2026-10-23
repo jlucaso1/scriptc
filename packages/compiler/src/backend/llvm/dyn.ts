@@ -234,7 +234,7 @@ export class LlDyn {
       case "dyn.dynIterNHelper":
         return this.dynIterNHelper();
       case "dyn.dynDestrCheckHelper":
-        return this.dynDestrCheckHelper();
+        return this.dynDestrCheckHelper(args[0] as number | undefined);
       case "dyn.dynKeyGetHelper":
         return this.dynKeyGetHelper();
       case "dyn.dynComputedKeyGetHelper":
@@ -4298,7 +4298,11 @@ export class LlDyn {
     if (existing) return existing;
     const name = `sc_dyn_destr_check${suffix}`;
     this.dynBuilders.set(memoKey, name);
-    this.host.journalAllocated?.(name, "dyn.dynDestrCheckHelper", []);
+    this.host.journalAllocated?.(
+      name,
+      "dyn.dynDestrCheckHelper",
+      spellingLength === undefined ? [] : [spellingLength],
+    );
     const host = this.host;
     host.declare(`declare void @scr_jb_init(ptr)`);
     host.declare(`declare ptr @scr_jb_finish(ptr)`);
