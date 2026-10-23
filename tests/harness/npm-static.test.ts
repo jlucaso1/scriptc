@@ -1175,6 +1175,38 @@ describe(`npm-static pilots${sanitize ? " (sanitized)" : ""}`, () => {
     effectBuildTimeout,
   );
 
+  test("the published js-yaml loads, dumps and reports errors statically and matches Node", async () => {
+    const entry = join(pilotRoot, "js-yaml-cli.mjs");
+    const { coverage } = analyze(entry, { npmStatic: ["js-yaml"] });
+    expect(coverage.npmStatic).toEqual([{ package: "js-yaml", status: "static" }]);
+    expect(coverage.diagnostics).toHaveLength(0);
+    const binary = await buildStatic(entry, ["js-yaml"]);
+    const [reference, native] = await Promise.all([
+      runBinary(process.execPath, [entry]),
+      runBinary(binary, []),
+    ]);
+    expect(native.stdout.toString()).toBe(reference.stdout.toString());
+    expect(comparableStderr(native.stderr)).toEqual(reference.stderr);
+    expect(native.exitCode).toBe(reference.exitCode);
+    expect(native.exitCode).toBe(0);
+  }, 300_000);
+
+  test("the published smol-toml parses and stringifies statically and matches Node", async () => {
+    const entry = join(pilotRoot, "smol-toml-cli.mjs");
+    const { coverage } = analyze(entry, { npmStatic: ["smol-toml"] });
+    expect(coverage.npmStatic).toEqual([{ package: "smol-toml", status: "static" }]);
+    expect(coverage.diagnostics).toHaveLength(0);
+    const binary = await buildStatic(entry, ["smol-toml"]);
+    const [reference, native] = await Promise.all([
+      runBinary(process.execPath, [entry]),
+      runBinary(binary, []),
+    ]);
+    expect(native.stdout.toString()).toBe(reference.stdout.toString());
+    expect(comparableStderr(native.stderr)).toEqual(reference.stderr);
+    expect(native.exitCode).toBe(reference.exitCode);
+    expect(native.exitCode).toBe(0);
+  }, 300_000);
+
   test("inferred variadic factories preserve checked callable results", async () => {
     const entry = join(pilotRoot, "variadic-factory-cli.ts");
     const binary = await buildStatic(entry, ["variadic-factory"]);
@@ -1455,6 +1487,24 @@ describe(`npm-static pilots${sanitize ? " (sanitized)" : ""}`, () => {
   test("bundled chunk 2595-bundled-chunk-emitter builds its emitters through require bindings", async () => {
     await expectNodeParity(join(fixturesRoot, "npm/cases/2595-bundled-chunk-emitter/main.ts"), [
       "gtchunkee",
+    ]);
+  }, 180_000);
+
+  // 7546: a one-line minified ES module: a var statement whose later
+  // declarators spread earlier ones, regexes read through an untyped rules
+  // table, and a function instantiated with typed and untyped arguments.
+  test("the minified module 7546-minified-esm-rules compiles statically and matches Node", async () => {
+    await expectNodeParity(join(fixturesRoot, "npm/cases/7546-minified-esm-rules/main.ts"), [
+      "gtminimark",
+    ]);
+  }, 180_000);
+
+  // 7547: an identifier-minified esbuild CommonJS bundle: the __commonJS
+  // helper and chunk parameters renamed, { value: !0 } stamps, and
+  // (0, ns.member)(...) calls of builtin module functions.
+  test("the identifier-minified bundle 7547-minified-cjs-chunks compiles statically and matches Node", async () => {
+    await expectNodeParity(join(fixturesRoot, "npm/cases/7547-minified-cjs-chunks/main.ts"), [
+      "gtminicache",
     ]);
   }, 180_000);
 

@@ -1,6 +1,7 @@
 /* scriptc runtime — dynamic values: the checked-dynamic tree, native handles,
  * dyn promises, the ambient receiver and listener adapters (scr_json.c,
- * scr_dyn_handle.c, scr_async_dyn.c). Included by scr_runtime.h, which says
+ * scr_dyn_handle.c, scr_async_dyn.c), and the message readers of typed
+ * 'message' listeners (scr_message.c). Included by scr_runtime.h, which says
  * where new declarations go. */
 #ifndef SCR_DYN_H
 #define SCR_DYN_H
@@ -143,6 +144,7 @@ typedef enum {
   X(ABORT_CONTROLLER, 15) /* native static-fetch AbortController */ \
   X(ABORT_SIGNAL, 8) /* native static-fetch AbortSignal */ \
   X(ARRAY_BUFFER, 18) /* fixed-length ArrayBuffer storage */ \
+  X(ASYMMETRIC_CRYPTO_KEY, 69) /* WebCrypto ECDSA and RSA CryptoKey (scr_webcrypto_pki.c) */ \
   X(BLOB, 41) /* ScrBlob — new Blob() and Blob#slice() */ \
   X(BROADCAST_CHANNEL, 51) /* worker_threads BroadcastChannel (scr_worker_events.c) */ \
   X(BUILTIN_MODULE, 21) /* native builtin export object */ \
@@ -155,6 +157,8 @@ typedef enum {
   X(DATE, 30) /* JavaScript Date with stable native identity */ \
   X(DECIPHER, 46) /* node:crypto Decipheriv (scr_cipher.c) */ \
   X(DGRAM_SOCKET, 62) /* dgram.Socket (scr_dgram.c) */ \
+  X(DIFFIE_HELLMAN, 70) /* node:crypto DiffieHellman (scr_dh.c) */ \
+  X(DIFFIE_HELLMAN_GROUP, 71) /* node:crypto DiffieHellmanGroup (scr_dh.c) */ \
   X(DIR, 44) /* fs.Dir (scr_lib.c) */ \
   X(DISPOSABLE_STACK, 49) /* DisposableStack (scr_symbol.c) */ \
   X(ECDH, 64) /* node:crypto ECDH (scr_ecdh.c) */ \
@@ -165,6 +169,7 @@ typedef enum {
   X(FETCH_RESPONSE, 12) /* native static-fetch Response */ \
   X(FILE, 42) /* ScrBlob with a name — new File() */ \
   X(FILE_HANDLE, 17) /* fs/promises.FileHandle */ \
+  X(FINALIZATION_REGISTRY, 72) /* FinalizationRegistry (bookkeeping only) */ \
   X(GLOBAL, 22) /* native global object identity */ \
   X(H2_SESSION, 4) /* ScrH2Session — Http2Session (client & server) */ \
   X(H2_STREAM, 5) /* ScrH2Stream — Http2Stream (client & server) */ \
@@ -185,14 +190,18 @@ typedef enum {
   X(NET_SERVER, 3) /* ScrNetServer — net.Server (http.Server rides the same handle) */ \
   X(NET_SOCKET, 2) /* ScrNetSocket — net.Socket */ \
   X(NET_SOCKET_ADDRESS, 47) /* net.SocketAddress (scr_net.c) */ \
+  X(PRIVATE_KEY, 65) /* node:crypto PrivateKeyObject (scr_pki.c) */ \
+  X(PUBLIC_KEY, 66) /* node:crypto PublicKeyObject (scr_pki.c) */ \
   X(REGEXP, 26) /* native RegExp, shared compiled pattern */ \
   X(SEARCH_PARAMS, 33) /* live WHATWG URLSearchParams */ \
   X(SEGMENTER, 19) /* default Unicode grapheme segmentation */ \
   X(SEGMENTS, 20) /* iterable immutable segmentation result */ \
   X(SET, 25) /* native Set<unknown>, shared backing map */ \
   X(SHARED_ARRAY_BUFFER, 37) \
+  X(SIGN, 67) /* node:crypto Sign (scr_pki.c) */ \
   X(STDIO, 27) /* stable process stdin/stdout/stderr values */ \
   X(URL, 28) /* native WHATWG URL */ \
+  X(VERIFY, 68) /* node:crypto Verify (scr_pki.c) */ \
   X(WASM_GLOBAL, 61) /* WebAssembly.Global */ \
   X(WASM_INSTANCE, 58) /* WebAssembly.Instance */ \
   X(WASM_MEMORY, 59) /* WebAssembly.Memory */ \
@@ -246,6 +255,55 @@ typedef struct ScrDynTypedCast {
  * with the exception pending), calls through the closure, and returns the
  * result as an owned (+1) dyn value. `args` entries are BORROWED. */
 typedef ScrDyn *(*ScrDynThunk)(ScrClosure *clo, ScrDyn *const *args, size_t argc);
+
+/* A compiled 'message' listener's typed entry: builds the closure's
+ * parameter from the message's nodes (the readers below) and calls
+ * the closure. Answers false, without calling it, when the message does
+ * not have the parameter's layout; the caller then decodes the message
+ * and calls the thunk. */
+struct ScrMessage;
+typedef bool (*ScrDynMessageListener)(ScrClosure *clo, const struct ScrMessage *message);
+
+/* The kinds of a message's nodes (scr_message.c). */
+typedef enum {
+  SCR_MESSAGE_UNDEFINED,
+  SCR_MESSAGE_NULL,
+  SCR_MESSAGE_BOOL,
+  SCR_MESSAGE_NUMBER,
+  SCR_MESSAGE_STRING,
+  SCR_MESSAGE_BIGINT,
+  SCR_MESSAGE_ARRAY,
+  SCR_MESSAGE_OBJECT,
+  SCR_MESSAGE_STORAGE,
+  SCR_MESSAGE_BYTES,
+  SCR_MESSAGE_ARRAY_BUFFER,
+  SCR_MESSAGE_ERROR,
+  /* A deeply frozen plain-data graph shared by pointer (see publication). */
+  SCR_MESSAGE_PUBLISHED,
+  /* A typed value published with @scriptc/threads (immortal), delivered as
+   * a fresh typed-ref capsule over the same pointer. */
+  SCR_MESSAGE_TYPED_REF,
+  /* A transferred MessagePort: its channel end (+1) and side. */
+  SCR_MESSAGE_PORT,
+  /* A native handle cloned through its unit's ScrDynHandleTransfer. */
+  SCR_MESSAGE_HANDLE,
+} ScrMessageKind;
+
+/* Readers for compiled 'message' listeners (ScrDynMessageListener), which
+ * build their typed parameter from the nodes. Node 0 is the root, and a
+ * node's values have higher numbers. scr_message_readable answers whether
+ * the message can reach these listeners: no node is reached twice, and it
+ * holds no ports or native handles, which the receiver adopts when it
+ * decodes the message. kind answers a ScrMessageKind; number reads a
+ * NUMBER or BOOL node, string a STRING node (+1). fields answers whether an
+ * OBJECT node has exactly the given keys, in order, and writes their value
+ * nodes. */
+bool scr_message_readable(const struct ScrMessage *message);
+int32_t scr_message_kind(const struct ScrMessage *message, size_t node);
+double scr_message_number(const struct ScrMessage *message, size_t node);
+ScrStr *scr_message_string(const struct ScrMessage *message, size_t node);
+bool scr_message_fields(const struct ScrMessage *message, size_t node, const char *const *names,
+                        const size_t *lengths, size_t count, size_t *values);
 
 /* Object member. Keys own shared immutable UTF-8 bytes (NUL-terminated for
  * convenience; key_len excludes the NUL) — duplicate keys were already
@@ -306,7 +364,22 @@ typedef struct ScrDynTypedRecordOps {
   /* The field names as an immortal string[], built on first use by
    * for-in over a record with every field present (atomic slot). */
   ScrArr *keys;
+  /* A shape whose values enumerate their keys in more than one order
+   * (IrRecordShape.orderVariants) binds a table with only this hook: it
+   * answers the table of the record's current order, which a write of an
+   * optional key can change after the record is boxed. NULL in every other
+   * table. */
+  const struct ScrDynTypedRecordOps *(*select)(void *rec);
 } ScrDynTypedRecordOps;
+/* A record capsule's ops while it answers from the native record (no view
+ * created yet), or NULL. */
+const ScrDynTypedRecordOps *scr_dyn_typed_ref_live_record(const ScrDyn *d);
+/* The declaration-typed boundary's adoption (scr_decl_adopt.c, linked by
+ * programs with boundary casts): the nodes of `source` that something else
+ * still references become live capsules of the native value `capsule`
+ * holds. Both borrowed; a node that is not plain data throws the path
+ * TypeError before anything changes. */
+void scr_dyn_decl_adopt(ScrDyn *source, ScrDyn *capsule);
 
 /* Prototype members of a compiled class seen as `unknown`, emitted per
  * class by the compiler: the string names of methods, getters and setters
@@ -321,6 +394,25 @@ typedef struct ScrDynTypedClassOps {
   ScrStr *const *names; /* immortal member-name strings */
   ScrStr *class_name;   /* immortal constructor name; NULL for an anonymous class */
 } ScrDynTypedClassOps;
+
+/* A compiled JavaScript class whose instances record their own properties
+ * in a property bag and whose views inherit from the class's prototype
+ * data, emitted per class by the compiler. The view of such an instance is
+ * a fresh object holding exactly the bag's string-keyed properties, where
+ * each declared field among them takes its value from the native slot, and
+ * whose prototype is the class's. A method call can therefore resolve
+ * without building the view (scr_dyn_typed_ref_bag_method).
+ *   bag: the instance's bag, borrowed; NULL or undefined when it has none;
+ *   prototype: +1 prototype a fresh view of the instance takes;
+ *   names: the declared fields whose values come from native slots;
+ *   field: +1 view value of declared field `index`. */
+typedef struct ScrDynTypedBagClassOps {
+  ScrDyn *(*bag)(void *instance);
+  ScrDyn *(*prototype)(void *instance);
+  size_t count;
+  ScrStr *const *names; /* immortal field-name strings */
+  ScrDyn *(*field)(void *instance, size_t index);
+} ScrDynTypedBagClassOps;
 
 struct ScrDyn {
   size_t rc; /* SIZE_MAX = immortal (unused for dyn; kept per convention) */
@@ -365,11 +457,13 @@ struct ScrDyn {
       void *source_identity;
       ScrDyn *(*source_access)(void *, bool materialize);
       struct ScrDynObjectIndex *index; /* optional wide-object lookup; owns no values */
-      /* On a runtime-built class prototype (e.g. url.Url.prototype): the
-       * constructor name (static text) util.inspect prints for objects
-       * inheriting from it (scr_dyn_class_name). NULL otherwise. Only
-       * prototypes that live until their thread exits set it, and they
-       * clear it before release, so freelist reuse never sees it. */
+      /* On a runtime-built class prototype (e.g. url.Url.prototype) and
+       * on a compiled class's prototype object: the constructor name
+       * (static or immortal text) util.inspect prints for objects
+       * inheriting from it (scr_dyn_class_name). NULL otherwise. Names
+       * that are copies live on prototypes that live until their thread
+       * exits, and those clear it before release; reuse of a freed object
+       * resets it (scr_dyn_alloc). */
       const char *class_name;
       struct ScrDynRegion *region; /* see ScrDynRegion */
       /* The dynamic tier's hidden class (scr_js_object.c): the transition
@@ -384,7 +478,7 @@ struct ScrDyn {
      * and `name` are static compiler-emitted literals (never freed); name
      * may be NULL (anonymous — inspect prints [Function (anonymous)]).
      * The dyn→closure ownership edge is traced by the cycle collector. */
-    struct { ScrClosure *clo; ScrDynThunk thunk; const char *sig; const char *name; uint32_t arity; ScrClassObj *class_obj; } fn;
+    struct { ScrClosure *clo; ScrDynThunk thunk; const char *sig; const char *name; uint32_t arity; ScrClassObj *class_obj; ScrDynMessageListener message; } fn;
     /* Native handles normally keep conservative ownership edges. Sets
      * backed by cycle-capable maps expose their edge to the collector.
      * Cache that allocation property: during collection the map may be
@@ -404,7 +498,9 @@ struct ScrDyn {
        * keep their ScrDynTypedRecordOps here instead, flagged by `record`
        * (scr_dyn_typed_ref_bind_record), and class instances their
        * ScrDynTypedClassOps, flagged by `klass`
-       * (scr_dyn_typed_ref_bind_class). NULL for other referents. */
+       * (scr_dyn_typed_ref_bind_class), or their ScrDynTypedBagClassOps,
+       * flagged by `bag_class` (scr_dyn_typed_ref_bind_bag_class). NULL for
+       * other referents. */
       const ScrDynTypedArrayOps *array;
       /* Both caches belong to this capsule. ReadableStream canonicalizes
        * capsules for repeated source references, so the refreshed dyn view
@@ -413,11 +509,12 @@ struct ScrDyn {
       ScrDyn *materialized;
       ScrDynTypedCast *casts;
       /* One word keeps this, the largest payload, at its previous size. */
-      uint32_t type_key_len : 28;
+      uint32_t type_key_len : 27;
       uint32_t traced : 1; /* native referent has a cycle header */
       uint32_t observed : 1; /* native release reports this identity's disposal */
       uint32_t record : 1; /* `array` holds ScrDynTypedRecordOps */
       uint32_t klass : 1; /* `array` holds ScrDynTypedClassOps */
+      uint32_t bag_class : 1; /* `array` holds ScrDynTypedBagClassOps */
     } typed_ref;
     /* SCR_DYN_PROMISE: the retained promise. The boundary contract: it
      * settles with a dyn payload (SCR_EXC_REF ScrDyn fulfillment or a
@@ -443,6 +540,10 @@ _Static_assert(offsetof(ScrDyn, null_proto) == sizeof(size_t) + sizeof(ScrDynKin
                "dyn-to-record conversions read null_proto at byte 13 (9 on wasm32)");
 _Static_assert(offsetof(ScrDyn, v.typed_ref.type_key) == 16 + 3 * sizeof(void *),
                "typed_ref.type_key offset");
+/* Emitted brand probes read type_key_len as the low 27 bits of the 32-bit
+ * word after `casts` (native 88, wasm32 52). */
+_Static_assert(offsetof(ScrDyn, v.typed_ref.casts) == 16 + 8 * sizeof(void *),
+               "typed_ref.casts offset");
 /* The region links ride in payload space the capsule variant already
  * reserves, so dyn nodes keep their size (and allocation size class). */
 _Static_assert(sizeof(((ScrDyn *)0)->v.arr) <= sizeof(((ScrDyn *)0)->v.typed_ref) &&
@@ -554,13 +655,18 @@ static inline const char *scr_dyn_class_name(const ScrDyn *d) {
 /* The element hooks of a live array capsule, or NULL (including for record
  * and class capsules, which keep their hooks in the same slot). */
 static inline const ScrDynTypedArrayOps *scr_dyn_typed_ref_array_ops(const ScrDyn *d) {
-  return d->v.typed_ref.record || d->v.typed_ref.klass ? NULL : d->v.typed_ref.array;
+  return d->v.typed_ref.record || d->v.typed_ref.klass || d->v.typed_ref.bag_class
+             ? NULL
+             : d->v.typed_ref.array;
 }
 
 /* BORROWED member lookup on a SCR_DYN_OBJ; NULL when the key is absent. */
 ScrDyn *scr_dyn_obj_get(const ScrDyn *d, const char *key, size_t key_len);
 /* Own-enumerable check on a SCR_DYN_OBJ. */
 bool scr_dyn_obj_enumerable(const ScrDyn *d, const char *key, size_t key_len);
+/* Stores own property `entry` of `source` on `target` with its attributes:
+ * plain data properties by an ordinary write, others by their descriptor. */
+void scr_dyn_copy_entry(ScrDyn *target, const ScrDyn *source, const ScrDynEntry *entry);
 /* Literal discriminator tests used before selecting a typed record layout.
  * Missing fields and different primitive kinds never match. Borrowed args. */
 bool scr_dyn_field_eq_str(const ScrDyn *d, const ScrStr *key, const ScrStr *value);
@@ -654,6 +760,9 @@ ScrDyn *scr_dyn_native_set_new(const ScrDyn *seed);
 ScrDyn *scr_dyn_native_set(ScrMap *value); /* borrowed backing, +1 box */
 bool scr_dyn_native_set_is(const ScrDyn *value);
 ScrDyn *scr_dyn_native_map(ScrMap *value); /* borrowed backing, +1 box */
+/* `new Map(entries)` over a checked-dynamic seed: +1, or NULL with the
+ * exception pending. */
+ScrDyn *scr_dyn_native_map_new(const ScrDyn *seed);
 bool scr_dyn_native_map_is(const ScrDyn *value);
 void scr_regex_reset_last_index(ScrRegex *re, double index);
 ScrRegex *scr_regex_new_checked(const ScrDyn *pattern, const ScrDyn *flags);
@@ -662,6 +771,40 @@ bool scr_dyn_native_url_is(const ScrDyn *value);
 ScrDyn *scr_dyn_native_search_params(ScrSearchParams *value);
 bool scr_dyn_native_search_params_is(const ScrDyn *value);
 bool scr_dyn_native_date_is(const ScrDyn *value);
+/* Instances of program classes declared `extends Date` (scr_lib.c). */
+void scr_date_class_operation_install(ScrDyn *time, ScrDyn *methods);
+/* Set by scr_date_class_operation_install; NULL in a program without such
+ * a class, where every wrapper below answers false or NULL. */
+typedef struct {
+  bool (*time)(const ScrDyn *value, double *time);
+  ScrDyn *(*to_json)(const ScrDyn *value, const ScrDyn *key);
+  ScrDyn *(*to_string)(const ScrDyn *value);
+  ScrDyn *(*value_of)(const ScrDyn *value);
+  ScrStr *(*name)(const ScrDyn *value);
+  ScrDyn *(*method)(const ScrDyn *value, const char *key, size_t key_len);
+} ScrDateClassHooks;
+extern const ScrDateClassHooks *scr_date_class_hooks;
+static inline bool scr_dyn_date_class_time(const ScrDyn *value, double *time) {
+  return scr_date_class_hooks && scr_date_class_hooks->time(value, time);
+}
+static inline ScrDyn *scr_dyn_date_class_to_json(const ScrDyn *value, const ScrDyn *key) {
+  return scr_date_class_hooks->to_json(value, key);
+}
+static inline ScrDyn *scr_dyn_date_class_to_string(const ScrDyn *value) {
+  return scr_date_class_hooks->to_string(value);
+}
+static inline ScrDyn *scr_dyn_date_class_value_of(const ScrDyn *value) {
+  return scr_date_class_hooks->value_of(value);
+}
+static inline ScrStr *scr_dyn_date_class_name(const ScrDyn *value) {
+  return scr_date_class_hooks ? scr_date_class_hooks->name(value) : NULL;
+}
+static inline ScrDyn *scr_dyn_date_class_method(const ScrDyn *value, const char *key, size_t key_len) {
+  return scr_date_class_hooks ? scr_date_class_hooks->method(value, key, key_len) : NULL;
+}
+bool scr_dyn_date_instance_is(const ScrDyn *value);
+ScrDyn *scr_dyn_date_class_member(const ScrDyn *d, const char *key, size_t key_len);
+double scr_dyn_date_arguments_time(const ScrDyn *arguments);
 ScrDyn *scr_dyn_native_date_new(const ScrDyn *arguments);
 ScrDyn *scr_dyn_native_date_new_fields(const ScrDyn *arguments);
 ScrDyn *scr_dyn_native_date_new_value(const ScrDyn *arguments);
@@ -725,6 +868,9 @@ ScrDyn *scr_dyn_array_constructor(void);
 /* The interned builtin constructor `name` (Object, Date, RegExp, Map, Set,
  * Promise, WeakMap, WeakSet) as a dynamic function value: +1. */
 ScrDyn *scr_dyn_global_constructor(const ScrStr *name);
+/* The interned function value of an error constructor ("TypeError"), or
+ * NULL for other names. */
+ScrDyn *scr_dyn_error_constructor(const char *name);
 /* A builtin global function (setTimeout, setImmediate, process.nextTick, ...)
  * as an interned dynamic function value: +1. */
 ScrDyn *scr_dyn_builtin_function(const ScrStr *name);
@@ -742,6 +888,7 @@ ScrDyn *scr_dyn_iterator(const ScrDyn *value, const ScrStr *spell);
 /* for await over a checked-dynamic value (scr_dyn_for_await.c). */
 ScrDyn *scr_dyn_async_iterator_open(ScrDyn *value, ScrStr *spell);
 bool scr_dyn_async_iterator_was_sync(void);
+void scr_dyn_async_iterator_set_sync(bool sync);
 ScrDyn *scr_dyn_iterator_optional(const ScrDyn *value);
 /* from.js's probe: 2 when value[Symbol.asyncIterator] is set, 1 when
  * value[Symbol.iterator] is, 0 for neither, -1 with an error pending. */
@@ -760,6 +907,7 @@ ScrDyn *scr_dyn_open_iterator(const ScrDyn *value, int *kind, bool generators);
  * for-of protocol reads it. +1, or NULL with the error pending. */
 ScrDyn *scr_dyn_iterator_result_get(const ScrDyn *result, const char *key, size_t len);
 void scr_dyn_install_iterator_symbol(ScrDyn *key);
+void scr_dyn_install_has_instance_symbol(ScrDyn *key);
 void scr_dyn_install_async_iterator_symbol(ScrDyn *key);
 void scr_dyn_install_async_dispose_symbol(ScrDyn *key);
 /* True when key is Symbol.asyncDispose (registered by the symbol unit when
@@ -814,6 +962,9 @@ void *scr_dyn_obj_source_cast(const ScrDyn *d,
 ScrDyn *scr_dyn_new_obj_null_proto(void);
 ScrDyn *scr_dyn_obj_create(ScrDyn *prototype);
 ScrDyn *scr_dyn_obj_create_with_properties(ScrDyn *prototype, ScrDyn *descriptors);
+ScrDyn *scr_dyn_get_prototype_for_identity(ScrDyn *object);
+bool scr_dyn_bag_create_field(ScrDyn *bag, const ScrStr *key);
+bool scr_dyn_is_class_capsule(const ScrDyn *d);
 ScrDyn *scr_dyn_get_prototype(ScrDyn *object);
 ScrDyn *scr_dyn_get_own_property_descriptors(ScrDyn *object);
 ScrDyn *scr_dyn_set_prototype(ScrDyn *object, ScrDyn *prototype);
@@ -834,9 +985,16 @@ void scr_dyn_proxy_unsupported(const char *operation);
 ScrDyn *scr_dyn_new_bytes(const ScrBytes *b);
 ScrDyn *scr_bytes_constructor(const ScrStr *name);
 bool scr_bytes_instanceof(const ScrDyn *value, const ScrDyn *callee);
+bool scr_bytes_instanceof_at(const ScrDyn *value, const ScrDyn *callee, const ScrStr *refusal);
 bool scr_dyn_data_view_is(const ScrDyn *value);
 ScrDyn *scr_dyn_construct(const ScrDyn *callee, const ScrDyn *args, const ScrStr *what);
 ScrDyn *scr_bytes_construct(const ScrDyn *callee, const ScrDyn *args, const ScrStr *what);
+/* Installed by scr_dyn_invoke.c when it interns a builtin constructor value
+ * (scr_dyn_global_constructor): false when `callee` is not one of them;
+ * otherwise true with `new callee(...args)` in *result (+1, or NULL with
+ * the exception pending). */
+extern SCR_TL bool (*scr_dyn_global_construct_fn)(const ScrDyn *callee, const ScrDyn *args,
+                                                  ScrDyn **result);
 ScrDyn *scr_dyn_bytes_key_get(const ScrDyn *value, const ScrStr *key);
 /* The Buffer-flavored twin (stream chunks): string coercion/toString
  * decode utf8 instead of joining elements. */
@@ -892,11 +1050,34 @@ void scr_dyn_typed_ref_bind_record(ScrDyn *d, const ScrDynTypedRecordOps *ops);
 void scr_record_source_note(void *rec, const ScrDyn *src, const char *const *names,
                             const size_t *lens, size_t count);
 bool scr_record_source_has(const void *rec);
+/* Object.freeze of a record a program may freeze: sets SCR_RC_FROZEN in its
+ * rc word (immortal records are left as they are). */
+void scr_record_freeze(void *record);
+/* Node's TypeError for a write to a frozen record: operation 0 assigns the
+ * existing property `key`, 1 adds it, 2 deletes it. `owner` is the object's
+ * text in the message ("#<Object>"). */
+void scr_record_throw_frozen(ScrStr *key, ScrStr *owner, double operation);
+/* The commit of a live record view converts the view into a new record
+ * `from`, whose conversion keeps the view's undeclared properties, then
+ * moves its fields into `to`: this moves the kept properties to `to` too,
+ * replacing any `to` had. */
+void scr_record_source_move(void *from, void *to);
 ScrDyn *scr_record_source_view(const void *rec);
 ScrDyn *scr_record_source_apply(ScrDyn *snapshot, const void *rec);
 /* Attach the prototype member names of a class instance capsule
  * (idempotent), so `in` sees its methods and accessors. */
 void scr_dyn_typed_ref_bind_class(ScrDyn *d, const ScrDynTypedClassOps *ops);
+/* Attach the bag and prototype hooks of a capsule of a bag-tracked class
+ * instance (idempotent). */
+void scr_dyn_typed_ref_bind_bag_class(ScrDyn *d, const ScrDynTypedBagClassOps *ops);
+/* The method `key` that a call on a bag-tracked class instance capsule
+ * reads from its view, +1, when an ordinary data property answers it: an
+ * own one (a declared field's value from its native slot, or another bag
+ * property's value), or else one on the view's prototype chain. NULL when
+ * only the view can answer (the caller builds it), and also NULL, with the
+ * exception pending, when the prototype hook threw. Never runs user
+ * code. */
+ScrDyn *scr_dyn_typed_ref_bag_method(const ScrDyn *d, const char *key, size_t key_len);
 /* The constructor name of a class instance capsule's own class, for
  * util.inspect; NULL when the capsule is not a bound class instance, its
  * class is anonymous, or its prototype was replaced. */
@@ -964,6 +1145,8 @@ ScrDyn *scr_dyn_map_seed_entry(const ScrDyn *entry);
 bool scr_weak_map_is(const ScrDyn *value);
 bool scr_weak_set_is(const ScrDyn *value);
 ScrDyn *scr_weak_map_new(ScrDyn *entries);
+ScrDyn *scr_finalization_registry_new(ScrDyn *cleanup);
+bool scr_finalization_registry_is(const ScrDyn *value);
 ScrDyn *scr_weak_set_new(ScrDyn *values);
 ScrDyn *scr_dyn_from_entries(ScrDyn *entries);
 ScrDyn *scr_dyn_mark_snapshot(ScrDyn *value); /* consumes and returns +1 */
@@ -997,6 +1180,9 @@ ScrDyn *scr_dyn_get_own_property_descriptor(ScrDyn *target, ScrDyn *key);
 ScrDyn *scr_dyn_array_proto_call(ScrDyn *target, ScrStr *method, ScrDyn *args);
 ScrDyn *scr_dyn_array_prototype(void); /* +1, installs native method adapters */
 ScrDyn *scr_dyn_array_prototype_base(void); /* +1, shared native array identity */
+/* Names the prototype object of a compiled class `name` for util.inspect
+ * (Node prints the constructor's name), unless it already has a name. */
+void scr_dyn_name_class_prototype(ScrDyn *prototype, const ScrStr *name);
 /* Native arrays read their holes as undefined without consulting
  * Array.prototype, so storing an element on Array.prototype raises SC2020.
  * True (with the error pending) when `recv` is Array.prototype. */
@@ -1040,6 +1226,10 @@ ScrStr *scr_dyn_to_string(const ScrDyn *d, const ScrStr *enc);
  * prototype chain has no toString (Node's answer). */
 ScrStr *scr_dyn_to_string_method(const ScrDyn *d, const ScrStr *enc, const ScrStr *what);
 ScrDyn *scr_dyn_object_prototype(void);
+ScrDyn *scr_dyn_error_prototype(void);
+bool scr_dyn_inherits_error_prototype(const ScrDyn *value);
+ScrDyn *scr_dyn_error_capture_stack_trace(ScrDyn *target);
+ScrDyn *scr_dyn_error_capture_stack_trace_function(void);
 ScrDyn *scr_dyn_function_apply(void);
 ScrDyn *scr_dyn_reflect_apply(ScrDyn *target, ScrDyn *receiver, ScrDyn *arguments_list);
 ScrDyn *scr_dyn_apply_array_like(const ScrDyn *target, const ScrDyn *receiver, const ScrDyn *arguments, const char *what);
@@ -1148,6 +1338,10 @@ void scr_error_set_prop(ScrError *e, const char *key, size_t key_len, ScrDyn *va
 ScrDyn *scr_errdyn_view_of(const ScrError *e); /* borrowed or NULL */
 /* ToBoolean over the dyn kind (JS-exact); borrowed, never throws. */
 bool scr_dyn_truthy(const ScrDyn *d);
+/* Math.max/Math.min(...src) over an untyped iterable; `what` names the
+ * source in V8's null/undefined spread TypeError. NaN with it pending. */
+double scr_dyn_math_fold(const ScrDyn *src, bool max, const ScrStr *what);
+int scr_dyn_has_instance_hook(const ScrDyn *value, const ScrDyn *callee);
 /* JS String() over a dyn value (arrays join, [object Object], the error
  * encoding renders "name: message"); borrowed, result +1, never throws. */
 ScrStr *scr_dyn_display(const ScrDyn *d);
@@ -1163,15 +1357,19 @@ bool scr_dyn_strict_eq(const ScrDyn *a, const ScrDyn *b);
  * result owned (+1). MAY THROW (NULL with the exception pending). */
 ScrDyn *scr_dyn_prepare_method(ScrDyn *recv, const char *method);
 ScrDyn *scr_dyn_invoke_prepared(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
-/* scr_dyn_invoke_prepared for Buffer.prototype method names (scr_bytes_dyn.c),
- * one entry per method family: a Buffer receiver runs the method, any other
- * takes the ordinary dispatch. */
-ScrDyn *scr_dyn_invoke_buffer_num(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
-ScrDyn *scr_dyn_invoke_buffer_write(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
-ScrDyn *scr_dyn_invoke_buffer_fill(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
-ScrDyn *scr_dyn_invoke_buffer_to_string(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
-ScrDyn *scr_dyn_invoke_buffer_search(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
-ScrDyn *scr_dyn_invoke_buffer(ScrDyn *recv, ScrDyn *callee, const char *method, ScrDyn *const *args, size_t argc, const char *what);
+/* scr_dyn_invoke_prepared for a call site whose method name is a constant:
+ * *mid_slot, the site's -1-initialized slot, caches the name's method id
+ * after the first call, so later calls skip the name lookup. */
+ScrDyn *scr_dyn_invoke_prepared_id(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
+/* scr_dyn_invoke_prepared_id for Buffer.prototype method names
+ * (scr_bytes_dyn.c), one entry per method family: a Buffer receiver runs
+ * the method, any other takes the ordinary dispatch. */
+ScrDyn *scr_dyn_invoke_buffer_num(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
+ScrDyn *scr_dyn_invoke_buffer_write(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
+ScrDyn *scr_dyn_invoke_buffer_fill(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
+ScrDyn *scr_dyn_invoke_buffer_to_string(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
+ScrDyn *scr_dyn_invoke_buffer_search(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
+ScrDyn *scr_dyn_invoke_buffer(ScrDyn *recv, ScrDyn *callee, const char *method, int32_t *mid_slot, ScrDyn *const *args, size_t argc, const char *what);
 ScrDyn *scr_dyn_invoke(ScrDyn *recv, const char *method, ScrDyn *const *args, size_t argc, const char *what);
 /* Keyed read on a FUNC node: the own-property table first (defineProperties
  * writes land there), then "name" (the box's best-effort static name; ""
@@ -1190,6 +1388,9 @@ ScrDyn *scr_dyn_define_prototype_props(ScrDyn *target, ScrDyn *descs, ScrDyn *pr
  * (callers retain first when they keep their own reference); `sig`/`name`
  * must be static literals (the box never frees them; name may be NULL). */
 ScrDyn *scr_dyn_new_func(ScrClosure *clo, ScrDynThunk thunk, uint32_t arity, const char *sig, const char *name);
+/* Gives a function box made with thunk its typed message entry (an
+ * EventEmitter listener registered from it keeps the entry). */
+void scr_dyn_func_set_message(ScrDyn *fn, ScrDynThunk thunk, ScrDynMessageListener listener);
 ScrDyn *scr_dyn_new_class(ScrClassObj *cls, const char *type_key);
 /* EventEmitter and the stream constructors as untyped constructor values,
  * and instanceof over untyped constructor functions
@@ -1319,6 +1520,19 @@ ScrDyn *scr_dyn_visit_view(const ScrDyn *capsule);
  * (scr_http_dyn_install / scr_net_dyn_install — emitted main() calls
  * them exactly when the unit is linked, the scr_net_install story), so
  * this always-linked core never references gated units. */
+/* A method a handle class answers through invoke, read as a value
+ * (`typeof req.json`, `raw[key]()`): the read answers one function per
+ * (tag, method) that calls invoke on its `this`. length is the method's
+ * Function.prototype.length; rejects marks a method whose call on another
+ * receiver answers a rejected promise instead of throwing (the async
+ * WebIDL operations: Body's json(), ReadableStream's cancel()). */
+typedef struct ScrDynHandleMethod {
+  const char *name;
+  uint32_t length;
+  bool rejects;
+  const char *invalid_this; /* NULL = the class's (ScrDynHandleOps) */
+} ScrDynHandleMethod;
+
 typedef struct ScrDynHandleOps {
   const char *cls; /* Node's constructor name — error texts and dynCheck's "got ..." */
   void *(*retain)(void *h);
@@ -1380,7 +1594,46 @@ typedef struct ScrDynHandleOps {
   /* Cross-thread structured clone (postMessage, workerData); NULL =
    * DataCloneError. See ScrDynHandleTransfer. */
   const struct ScrDynHandleTransfer *transfer;
+  /* A handle that is also a Node Transform (Cipheriv, Decipheriv): the
+   * stream unit builds the handle's Transform from these operations on its
+   * first stream use. NULL = the class is not a stream. */
+  const struct ScrDynHandleTransform *transform;
+  /* The class's methods as values, terminated by a NULL name; NULL = a
+   * property read answers no methods (member calls still reach invoke).
+   * See ScrDynHandleMethod. */
+  const ScrDynHandleMethod *methods;
+  /* The TypeError (code ERR_INVALID_THIS) a method value called on another
+   * receiver raises; NULL = WebIDL's "Illegal invocation". */
+  const char *invalid_this;
+  /* A promise rejected with the pending exception (+1), for the rejects
+   * methods; the owning unit supplies it, since promises are a gated unit. */
+  ScrDyn *(*rejected)(void);
 } ScrDynHandleOps;
+
+/* The operations a Transform handle gives the stream unit (scr_stream.c):
+ * the slot where the handle keeps its stream (+1) with the stream's
+ * release, update() and final() over bytes (+1 Buffer, or NULL with the
+ * exception pending), and the handle's collector trace, since the
+ * stream's steps hold the handle. */
+typedef struct ScrDynHandleTransform {
+  void *(*stream)(void *h);
+  void (*set_stream)(void *h, void *stream, void (*release)(void *));
+  struct ScrBytes *(*update)(void *h, struct ScrBytes *chunk);
+  struct ScrBytes *(*final)(void *h);
+  ScrTraceFn trace;
+} ScrDynHandleTransform;
+
+/* Checked-dynamic member calls and property reads on a Transform handle,
+ * installed by the stream unit (scr_stream_install); NULL in a program
+ * without it. call answers true with *result set (+1, or NULL with the
+ * exception pending) for the members a native stream answers, and get
+ * answers a stream property (+1), or NULL for other keys. */
+typedef struct ScrHandleStreamHooks {
+  bool (*call)(const ScrDynHandleOps *ops, void *h, ScrDyn *self, const char *method,
+               ScrDyn *const *args, size_t argc, ScrDyn **result);
+  ScrDyn *(*get)(const ScrDynHandleOps *ops, void *h, const char *key, size_t key_len);
+} ScrHandleStreamHooks;
+extern SCR_TL const ScrHandleStreamHooks *scr_handle_stream_hooks;
 
 /* How a handle crosses threads, supplied by the handle's owning unit so the
  * message encoder (scr_message.c) needs no reference to gated units and no

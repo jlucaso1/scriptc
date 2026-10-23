@@ -1,3 +1,5 @@
+import { keyedHelperName } from "./stable-names.js";
+import { perKeyOrder } from "./key-order-witness.js";
 import {
   dynUndefinedExpr,
   boolLit,
@@ -39,12 +41,14 @@ import {
   isDynTypedRefType,
   recordTextCodecClass,
   shapeHasAccessorSlots,
+  shapeKeyOrders,
   typeKey,
 } from "../../ir/ir.js";
 import type { ClassInfo } from "./lower-classes.js";
 import { isSafeToDiscard, isSafeToRepeat } from "./expressions/evaluation-safety.js";
 import { symbolFieldDisplayName } from "./symbol-fields.js";
 import { eventTargetRootOf } from "./lower-event-target.js";
+import { dateRootOf } from "./builtins/date-classes.js";
 import { lowerSystemErrorMap } from "./lower-system-errors.js";
 import { isPerfEntryType, perfEntryJson } from "./builtins/performance.js";
 import { recordMayKeepSource, recordSourceTest } from "./record-sources.js";
@@ -268,7 +272,7 @@ function errorInspectHelper(
   const key = `insp.userError:${typeKey(t)}`;
   const existing = lowerer.inspectHelpers.get(key);
   if (existing) return existing;
-  const name = `%util.insp.${lowerer.inspectHelpers.size}`;
+  const name = keyedHelperName(lowerer, "%util.insp", key);
   lowerer.inspectHelpers.set(key, name);
   const v = (): IrExpr => varRef("v.0", t, loc);
   const r = (): IrExpr => varRef("r.0", F64, loc);
@@ -804,8 +808,9 @@ function inspectSupport(
       const info = lowerer.classes.get(t.className);
       if (!info) return `class '${t.className}' has no inspect lowering`;
       // EventTarget and Event subclasses render through Node's inspectors
-      // for those classes (the runtime's capsule view).
-      if (eventTargetRootOf(info) !== null) return null;
+      // for those classes (the runtime's capsule view), and so do classes
+      // declared `extends Date`.
+      if (eventTargetRootOf(info) !== null || dateRootOf(info) !== null) return null;
       if (isErrorClass(lowerer, t.className)) {
         if (userErrorClasses(info).length > 0 && errorHeaderOverridden(lowerer, info))
           return "error subclasses whose name, message or stack is an accessor or a prototype property have no inspect lowering yet";
@@ -957,7 +962,10 @@ export function inspectExpr(
         loc,
       };
     case "object":
-      if (eventTargetRootOf(lowerer.classes.get(t.className)) !== null) {
+      if (
+        eventTargetRootOf(lowerer.classes.get(t.className)) !== null ||
+        dateRootOf(lowerer.classes.get(t.className)) !== null
+      ) {
         return {
           kind: "libCall",
           fn: "insp.dyn",
@@ -1145,7 +1153,7 @@ function inspectHelper(lowerer: Lowerer, t: IrType, loc: SrcLoc): string {
   const key = `insp:${typeKey(t)}`;
   const existing = lowerer.inspectHelpers.get(key);
   if (existing) return existing;
-  const name = `%util.insp.${lowerer.inspectHelpers.size}`;
+  const name = keyedHelperName(lowerer, "%util.insp", key);
   lowerer.inspectHelpers.set(key, name);
 
   const v = (): IrExpr => varRef("v.0", t, loc);
@@ -1641,7 +1649,12 @@ function inspectHelper(lowerer: Lowerer, t: IrType, loc: SrcLoc): string {
           });
         }
         body.push(depthGate("[Object]"), ...begin());
-        for (const fname of order) {
+        // One walk per key order (see perKeyOrder).
+        const orders = shapeKeyOrders(current);
+        const walks = orders.map((): IrStmt[] => []);
+        for (const [k, fname] of orders.flatMap((order, k) =>
+          order.map((name) => [k, name] as const),
+        )) {
           const ft = byName.get(fname);
           if (!ft) continue;
           const show = entry(
@@ -1649,12 +1662,13 @@ function inspectHelper(lowerer: Lowerer, t: IrType, loc: SrcLoc): string {
             boolLit(false, loc),
           );
           const present = lowerer.recordFieldPresent(v(), t.shapeId, fname, loc);
-          body.push(
+          walks[k]!.push(
             present.kind === "recordHas"
               ? { kind: "if", cond: present, then: [show], else_: null, loc }
               : show,
           );
         }
+        body.push(...perKeyOrder(current, v(), walks, loc));
         body.push(
           ret(end(strLit("", loc), strLit("{", loc), strLit("}", loc), false, boolLit(false, loc))),
         );
@@ -1912,13 +1926,21 @@ function inspectHelper(lowerer: Lowerer, t: IrType, loc: SrcLoc): string {
 
   // A closed record that kept the undeclared properties of its checked
   // source renders through its live checked view, which holds them in the
-  // source's own-key order beside the current field values.
+  // source's own-key order beside the current field values. An array with
+  // properties besides its elements does too: the view lists them after
+  // the elements.
   let prependSourceGate: (() => void) | null = null;
-  if (t.kind === "record" && recordMayKeepSource(lowerer, t)) {
+  const sourceTest: IrExpr | null =
+    t.kind === "record" && recordMayKeepSource(lowerer, t)
+      ? recordSourceTest(v(), loc)
+      : t.kind === "array" && lowerer.dynConvertible(t)
+        ? { kind: "libCall", fn: "array.hasProperties", args: [v()], type: BOOL, loc }
+        : null;
+  if (sourceTest !== null) {
     prependSourceGate = (): void => {
       body.unshift({
         kind: "if",
-        cond: recordSourceTest(v(), loc),
+        cond: sourceTest,
         then: [
           ret({
             kind: "libCall",
@@ -2074,7 +2096,7 @@ function formatUnionHelper(
   const existing = lowerer.inspectHelpers.get(key);
   if (existing) return existing;
   const loc = helperLoc(site);
-  const name = `%util.fmtv.${lowerer.inspectHelpers.size}`;
+  const name = keyedHelperName(lowerer, "%util.fmtv", key);
   lowerer.inspectHelpers.set(key, name);
   const def = lowerer.unions.get(t.unionId);
   if (!def) throw new InternalCompilerError(`format value over unknown union ${t.unionId}`);

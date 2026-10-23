@@ -440,6 +440,37 @@ test("int32-closed locals keep the int32 range across loops and switches", () =>
   expect(switched.get(afterSwitch)).toEqual(INT32);
 });
 
+test("loop-carried locals written from Int32[] element reads keep the int32 range", () => {
+  const arrType = { kind: "array", elem: F64 } as const;
+  const loop = (localId: string): { after: IrExpr; f: IrFunction } => {
+    const after = ref();
+    // `x = a[x]!` in a loop: a cursor that follows indices stored in the array.
+    const read: IrExpr = {
+      loc,
+      kind: "arrayGet",
+      arr: { loc, kind: "varRef", localId, type: arrType },
+      index: ref(),
+      type: F64,
+    };
+    const f = fn([
+      assign(num(0)),
+      {
+        loc,
+        kind: "while",
+        cond: condition("<", ref("unknown"), num(1)),
+        body: [assign(read)],
+      },
+      observe(after),
+    ]);
+    return { after, f };
+  };
+  const elements = { elements: (arr: IrExpr) => arr.kind === "varRef" && arr.localId === "ints" };
+  const ints = loop("ints");
+  expect(analyzeIntegerRanges(ints.f, elements).get(ints.after)).toEqual(INT32);
+  const floats = loop("floats");
+  expect(analyzeIntegerRanges(floats.f, elements).get(floats.after) ?? null).toBeNull();
+});
+
 test("uint32-closed locals keep the uint32 range across loop back edges", () => {
   // for (let i = 0; i < n; i++) { v = unknown >>> 0; acc = (acc + v) >>> 0; ... }
   const loop = (start: IrExpr | null, writes: IrExpr[]) => {
@@ -795,6 +826,83 @@ test("a while condition on a string's length bounds a counter, and guarded incre
   });
   const rebound = set("text", { loc, kind: "strLit", value: "abc", type: STRING });
   expect(run((inside) => [observe(inside), bump, rebound]).after).toBeNull();
+});
+
+test("a nested while loop may advance a counter its own condition bounds", () => {
+  // while (pos < text.length) { observe(pos); while (pos < text.length && unknown === 1) pos++; pos += 2; }
+  const text: IrExpr = { loc, kind: "varRef", localId: "text", type: STRING };
+  const length: IrExpr = {
+    loc,
+    kind: "strIntrinsic",
+    method: "length",
+    receiver: text,
+    args: [],
+    type: F64,
+  };
+  const bump: IrStmt = {
+    loc,
+    kind: "exprStmt",
+    expr: { loc, kind: "incDec", op: "+", prefix: false, localId: "pos", type: F64 },
+  };
+  const skip: IrStmt = { loc, kind: "assign", localId: "pos", value: bin("+", ref("pos"), num(2)) };
+  const and = (left: IrExpr, right: IrExpr): IrExpr => ({
+    loc,
+    kind: "logical",
+    op: "&&",
+    left,
+    right,
+    type: BOOL,
+  });
+  const scan = (cond: IrExpr): IrStmt => ({ loc, kind: "while", cond, body: [bump] });
+  const run = (inner: IrStmt) => {
+    const inside = ref("pos"),
+      after = ref("pos");
+    const f = fn([
+      { loc, kind: "assign", localId: "pos", value: num(0) },
+      {
+        loc,
+        kind: "while",
+        cond: condition("<", ref("pos"), length),
+        body: [observe(inside), inner, skip],
+      },
+      observe(after),
+    ]);
+    f.locals.push(
+      { id: "pos", name: "pos", type: F64, mutable: true },
+      { id: "text", name: "text", type: STRING, mutable: false },
+    );
+    const ranges = analyzeIntegerRanges(f);
+    return { inside: ranges.get(inside), after: ranges.get(after) };
+  };
+  // Each inner pass starts below the length, so the scan stops at it at the
+  // latest; the skip then adds 2.
+  const bounded = scan(
+    and(condition("<", ref("pos"), length), condition("===", ref("unknown"), num(1))),
+  );
+  expect(run(bounded)).toEqual({
+    inside: { min: 0, max: 2147483646 },
+    after: { min: 0, max: 2147483649 },
+  });
+  // A nested loop that does not bound the counter, or writes it in its
+  // condition, leaves it unbounded.
+  expect(run(scan(condition("===", ref("unknown"), num(1)))).after).toBeNull();
+  const writing = scan(
+    condition(
+      "<",
+      { loc, kind: "incDec", op: "+", prefix: true, localId: "pos", type: F64 },
+      length,
+    ),
+  );
+  expect(run(writing).after).toBeNull();
+  // The same scan inside a labeled block or an expression is not walked
+  // pass by pass; its increments could repeat, so the counter stays unbounded.
+  expect(run({ loc, kind: "block", labels: ["scan"], body: [bounded] }).after).toBeNull();
+  const inExpression: IrStmt = {
+    loc,
+    kind: "exprStmt",
+    expr: { loc, kind: "seqExpr", stmts: [bounded], result: num(0), type: F64 },
+  };
+  expect(run(inExpression).after).toBeNull();
 });
 
 test("an array length bounds while and for counters even when the body resizes the array", () => {

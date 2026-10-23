@@ -16,6 +16,7 @@ import {
 } from "./workspace-registry.js";
 import {
   clearVirtualSources,
+  isVirtualSource,
   setVirtualSource,
   trackedExists,
   trackedReadFile,
@@ -53,10 +54,43 @@ export function npmStaticLexerVisibleNames(path: string): readonly string[] {
   return lexerNames.get(path.split("\\").join("/")) ?? [];
 }
 
+/** The suffix that replaces `.d.ts` in the name of a copy of an opted-in
+ * package's declaration file (npm-static-type-exports.ts). Defined here so
+ * this module does not depend on the syntax modules. */
+export const NPM_STATIC_TYPES_SUFFIX = ".scriptc-types.d.ts";
+
+/** Per runtime entry (forward slashes), the JSDoc typedefs that re-export
+ * its package's type-only declarations (npm-static-type-exports.ts). */
+let typeExportTypedefs = new Map<string, string>();
+
+/** Registers the copies of the opted-in packages' declaration files and the
+ * typedefs their runtime entries gain (after setNpmStaticPackages, which
+ * clears virtual sources). */
+export function setNpmStaticTypeExports(
+  copies: ReadonlyMap<string, string>,
+  typedefs: ReadonlyMap<string, string>,
+): void {
+  for (const [path, text] of copies) setVirtualSource(path, text);
+  typeExportTypedefs = new Map(typedefs);
+  rewriteCache.clear();
+}
+
+/** `text` (or the file's own text when null) with the typedefs of a
+ * package runtime entry appended: the entry re-exports the type-only
+ * declarations of the package's .d.ts, after every respelling, so
+ * positions stay. Null when `path` is no runtime entry and `text` is null. */
+function withTypeExportTypedefs(path: string, text: string | null): string | null {
+  const typedefs = typeExportTypedefs.get(path.split("\\").join("/"));
+  if (typedefs === undefined) return text;
+  const source = text ?? trackedReadFile(path);
+  return source === null ? text : `${source}\n${typedefs}\n`;
+}
+
 export function setNpmStaticPackages<T extends Iterable<string>>(packages: T): void {
   // npm packages served as builtins (graceful-fs as fs) never compile
   // their JavaScript, even when named.
   activePackages = new Set([...packages].filter((name) => npmBuiltinAliasOf(name) === null));
+  typeExportTypedefs = new Map();
   declarationOverloads = new Map();
   declarationProperties = new Map();
   offenders.clear();
@@ -452,6 +486,10 @@ export function npmStaticFsShadow(services: FrontendServices): NpmStaticFsShadow
           } else if (esm !== null) {
             original = esm;
           }
+          // TypeScript's UMD wrapper calls its factory with the module's own
+          // require and exports: the factory body is the module body.
+          const umd = original === null ? null : services.umdFactory(original, path);
+          if (umd !== null) original = umd;
           // Polyfill packages that ARE a Node builtin compile as the builtin.
           const aliased = original === null ? null : services.builtinAliasRequires(original, path);
           if (aliased !== null) original = aliased;
@@ -472,6 +510,7 @@ export function npmStaticFsShadow(services: FrontendServices): NpmStaticFsShadow
           if (exportsVar !== null) original = exportsVar;
           const respelled =
             split !== null ||
+            umd !== null ||
             tscHelpers !== null ||
             esm !== null ||
             aliased !== null ||
@@ -519,12 +558,17 @@ export function npmStaticFsShadow(services: FrontendServices): NpmStaticFsShadow
         } catch {
           rewritten = null; // unreadable/unparseable: fall through untouched
         }
+        rewritten = withTypeExportTypedefs(path, rewritten);
         rewriteCache.set(path, rewritten);
         return rewritten ?? undefined;
       }
-      return undefined;
+      // Other runtime entries (`.mjs`) keep their text and gain only the
+      // typedefs.
+      return withTypeExportTypedefs(path, null) ?? undefined;
     },
     hideFile: (path) => {
+      // The copies of the package's declaration files the typedefs name.
+      if (path.endsWith(NPM_STATIC_TYPES_SUFFIX) && isVirtualSource(path)) return false;
       const target = shadowTargetOf(path);
       if (!target) return false;
       if (isBundledShimForwarder(path)) return false;
@@ -570,26 +614,11 @@ export function clearProgramBuiltinAliasCache(): void {
  * but the bundler-emitted CJS export rewrite (npm-static-rewrite.ts)
  * types the getter-table shapes and the offender attribution degrades a
  * package whose surface still breaks its consumers — so those bundles are
- * worth ATTEMPTING: eligible when the .d.ts and unminified criteria hold,
- * gracefully per-package-degraded when the attempt fails. */
+ * worth ATTEMPTING: eligible when the .d.ts criteria hold, gracefully
+ * per-package-degraded when the attempt fails. Minified JS is attempted
+ * too: a minified dist is ordinary JavaScript, and the bundle recognizers
+ * know esbuild's __commonJS helper by its shape under any name. */
 const TRANSFORM_MARKERS = ["__webpack_require__"];
-
-/** Unminified-JS heuristic over an entry source: at least two lines and
- * an average line length under 200 characters (minified dists are one
- * enormous line; readable code averages well under 100). */
-function looksUnminified(source: string): boolean {
-  const lines = source.split("\n");
-  if (lines.length < 2) return false;
-  return source.length / lines.length <= 200;
-}
-
-/** A whitespace/syntax-minified bundler dist whose interop helpers keep
- * their names (`var __toESM=…,__toCommonJS=mod=>…`): the recognizers
- * verify those shapes and refuse the package precisely when they cannot,
- * so the minification heuristic need not refuse it up front. */
-function namedBundlerHelpers(source: string): boolean {
-  return /\b__(?:toCommonJS|commonJS|toESM)\d*\s*=\s*(?:\(|[A-Za-z_$][\w$]*\s*=>)/.test(source);
-}
 
 function hasTransformMarkers(source: string): boolean {
   return TRANSFORM_MARKERS.some((m) => source.includes(m));
@@ -632,8 +661,6 @@ export function npmStaticIneligibleReason(
   if (jsEntry === null) return "no runtime JS entry resolves";
   const source = trackedReadFile(jsEntry);
   if (source === null) return `its runtime entry ${jsEntry} cannot be read`;
-  if (!looksUnminified(source) && !namedBundlerHelpers(source))
-    return "its shipped JS looks minified";
   if (hasTransformMarkers(source)) {
     return "its shipped JS carries build-transform markers (bundled/transpiled dist)";
   }
