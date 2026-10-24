@@ -57,7 +57,7 @@ import {
   type WasmRange,
 } from "./module.js";
 
-import { simdIntegerOp, simdFloatOp, type SimdFloatOp } from "./simd.js";
+import { simdIntegerOp, simdFloatOp, type SimdFloatOp, relaxedSimdAlias } from "./simd.js";
 
 /** Trap codes (scr_wasm_abi.h SCR_WASM_TRAP_*). */
 export const TRAP_UNREACHABLE = 1;
@@ -110,6 +110,8 @@ const FUNC_ATTRS = `nounwind "disable-tail-calls"="true"`;
 
 const RUNTIME_DECLS = [
   "declare void @scr_wasm_trap(i32) noreturn nounwind cold",
+  "declare ptr @scr_wasm_import_vector_ref(ptr, i32)",
+  "declare void @scr_wasm_vector_js_error()",
   "declare void @scr_wasm_import_call(ptr, i32, ptr, ptr)",
   "declare i32 @scr_wasm_memory_grow(ptr, i32)",
   "declare void @scr_wasm_memory_fill(ptr, i32, i32, i32)",
@@ -347,6 +349,26 @@ class ModuleTranslator {
 
   importStub(index: number): void {
     const ft = this.funcType(index);
+    if (hasVectorSignature(ft)) {
+      // Vectors never cross JavaScript. Resolve a native Wasm import's
+      // original reference, preserving its instance through chained imports.
+      const out = [`define internal ${this.signature(ft, this.fn(index))} nounwind {`, "entry:"];
+      out.push("  %host = load ptr, ptr %inst");
+      out.push(`  %ref = call ptr @scr_wasm_import_vector_ref(ptr %host, i32 ${index})`);
+      out.push("  %code = load ptr, ptr %ref, align 8");
+      out.push("  %ip = getelementptr i8, ptr %ref, i64 16");
+      out.push("  %callee = load ptr, ptr %ip, align 8");
+      const args = ["ptr %callee", ...ft.params.map((t, i) => `${llType(t)} %p${i}`)].join(", ");
+      const ret = retType(ft.results);
+      if (ft.results.length === 0) {
+        out.push(`  call void %code(${args})`, "  ret void");
+      } else {
+        out.push(`  %result = call ${ret} %code(${args})`, `  ret ${ret} %result`);
+      }
+      out.push("}");
+      this.text.push(out.join("\n"));
+      return;
+    }
     const out: string[] = [];
     out.push(`define internal ${this.signature(ft, this.fn(index))} nounwind {`);
     out.push(`entry:`);
@@ -370,6 +392,7 @@ class ModuleTranslator {
   exportThunk(index: number): string {
     const name = `@${this.p}_x${index}`;
     const ft = this.funcType(index);
+    if (hasVectorSignature(ft)) return this.vectorJsThunk(name, false);
     const out: string[] = [];
     out.push(`define internal void ${name}(ptr %inst, ptr %a, ptr %r) nounwind {`);
     out.push(`entry:`);
@@ -408,6 +431,7 @@ class ModuleTranslator {
   callThunk(type: number): string {
     const name = `@${this.p}_k${type}`;
     const ft = this.m.types[type]!;
+    if (hasVectorSignature(ft)) return this.vectorJsThunk(name, true);
     const out: string[] = [];
     out.push(`define internal void ${name}(ptr %code, ptr %inst, ptr %a, ptr %r) nounwind {`);
     out.push(`entry:`);
@@ -439,6 +463,13 @@ class ModuleTranslator {
     return name;
   }
 
+  vectorJsThunk(name: string, indirect: boolean): string {
+    this.text.push(
+      `define internal void ${name}(${indirect ? "ptr %code, " : ""}ptr %inst, ptr %a, ptr %r) nounwind {\nentry:\n  call void @scr_wasm_vector_js_error()\n  unreachable\n}`,
+    );
+    return name;
+  }
+
   /** Emits the init function: globals, table initializers and segments,
    * in the specification's order. The runtime calls the start function
    * (which takes and returns nothing) separately. */
@@ -458,7 +489,7 @@ class ModuleTranslator {
         // value; the runtime's setter retains it.
         body.add(`  call void @scr_wasm_global_set_ref(ptr ${cell}, ptr ${v})`);
       } else {
-        body.add(`  store ${llType(global.type)} ${v}, ptr ${cell}`);
+        body.add(`  store ${llType(global.type)} ${v}, ptr ${cell}, align 8`);
       }
     }
     // Defined tables with an initializer.
@@ -1070,7 +1101,14 @@ class FunctionTranslator {
         case 0x23: {
           const g = c.u32();
           const cell = this.loadPtrSlot(this.mt.globalSlot(g));
-          stack.push(this.emit(`load ${llType(this.m.globals[g]!.type)}, ptr ${cell}`));
+          stack.push(this.emit(`load ${llType(this.m.globals[g]!.type)}, ptr ${cell}, align 8`));
+          break;
+        }
+        case 0xfd: {
+          if (c.u32() !== 12) throw new WasmTranslateError("invalid SIMD constant expression");
+          const lanes: string[] = [];
+          for (let i = 0; i < 16; i++) lanes.push(`i8 ${c.u8()}`);
+          stack.push(`<${lanes.join(", ")}>`);
           break;
         }
         case 0xd0:
@@ -2266,10 +2304,61 @@ class FunctionTranslator {
     }
   }
 
+  /** Deterministic legal projections of relaxed SIMD. In particular madd
+   * uses two roundings, and dot products interpret both inputs as signed. */
+  simdRelaxed(sub: number): void {
+    const vt = "<16 x i8>";
+    const pop = (): string => this.popType(VAL_V128, "relaxed SIMD").v;
+    const push = (v: string, t: string): void =>
+      this.push(this.emit(`bitcast ${t} ${v} to ${vt}`), VAL_V128);
+    if (sub >= 0x105 && sub <= 0x108) {
+      const bits = sub <= 0x106 ? 32 : 64;
+      const lanes = 128 / bits;
+      const t = `<${lanes} x ${bits === 32 ? "float" : "double"}>`;
+      const read = (): string => this.emit(`bitcast ${vt} ${pop()} to ${t}`);
+      const c = read(),
+        b = read(),
+        a = read();
+      let product = this.emit(`fmul ${t} ${a}, ${b}`);
+      if (sub === 0x106 || sub === 0x108) product = this.emit(`fneg ${t} ${product}`);
+      const sum = this.emit(`fadd ${t} ${product}, ${c}`);
+      const nan = this.emit(`fcmp uno ${t} ${sum}, ${sum}`);
+      const canonical = `<${Array.from({ length: lanes }, () => `${bits === 32 ? "float" : "double"} 0x7FF8000000000000`).join(", ")}>`;
+      push(this.emit(`select <${lanes} x i1> ${nan}, ${t} ${canonical}, ${t} ${sum}`), t);
+      return;
+    }
+    const acc = sub === 0x113 ? this.emit(`bitcast ${vt} ${pop()} to <4 x i32>`) : "";
+    const b = pop(),
+      a = pop();
+    const aw = this.emit(`sext ${vt} ${a} to <16 x i16>`);
+    const bw = this.emit(`sext ${vt} ${b} to <16 x i16>`);
+    const product = this.emit(`mul <16 x i16> ${aw}, ${bw}`);
+    const half = (start: number): string =>
+      this.emit(
+        `shufflevector <16 x i16> ${product}, <16 x i16> poison, <8 x i32> <${Array.from({ length: 8 }, (_, i) => `i32 ${2 * i + start}`).join(", ")}>`,
+      );
+    const pairs = this.emit(`add <8 x i16> ${half(0)}, ${half(1)}`);
+    if (sub === 0x112) {
+      push(pairs, "<8 x i16>");
+      return;
+    }
+    const wide = this.emit(`sext <8 x i16> ${pairs} to <8 x i32>`);
+    const groups = (start: number): string =>
+      this.emit(
+        `shufflevector <8 x i32> ${wide}, <8 x i32> poison, <4 x i32> <${Array.from({ length: 4 }, (_, i) => `i32 ${2 * i + start}`).join(", ")}>`,
+      );
+    const sum = this.emit(`add <4 x i32> ${groups(0)}, ${groups(1)}`);
+    push(this.emit(`add <4 x i32> ${sum}, ${acc}`), "<4 x i32>");
+  }
+
   /** SIMD uses LLVM vectors with no host ISA requirement. LLVM legalizes the
    * operations for the selected target; lane order is WebAssembly byte order. */
   simd(c: WasmCursor): void {
-    const sub = c.u32();
+    const sub = relaxedSimdAlias(c.u32());
+    if (sub >= 0x100 && sub <= 0x113) {
+      this.simdRelaxed(sub);
+      return;
+    }
     const floating = simdFloatOp(sub);
     if (floating !== null) {
       this.simdFloat(floating);
@@ -2856,20 +2945,6 @@ export function translateWasmModule(
   opts: WasmTranslateOptions,
 ): WasmTranslation {
   const m = parseWasmModule(bytes);
-  // The runtime ABI carries scalar slots and 64-bit global cells. Never
-  // truncate a vector or expose one through the JavaScript call boundary.
-  if (
-    m.funcTypes.some(
-      (type, index) =>
-        hasVectorSignature(m.types[type]!) &&
-        (index < m.importedFuncs || m.declaredRefs.has(index)),
-    ) ||
-    m.globals.some((g) => g.type === VAL_V128)
-  ) {
-    throw new WasmTranslateError(
-      "v128 function signatures at import/export/reference boundaries and globals are not supported",
-    );
-  }
   for (const t of m.tables) llType(t.elemType);
   const mt = new ModuleTranslator(m, wasmSymbolPrefix(sha256), opts);
   mt.translate();

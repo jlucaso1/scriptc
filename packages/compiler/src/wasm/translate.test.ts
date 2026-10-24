@@ -278,7 +278,7 @@ describe("SIMD128 instruction translation", () => {
     },
   );
 
-  test("keeps scalar runtime ABI boundaries outside the supported subset", () => {
+  test("exports vector functions with a rejecting JavaScript thunk", () => {
     const vector = [253, 12, ...new Array<number>(16).fill(0)];
     const vectorBody = [0, ...vector, 11];
     const abi = wasmModule(
@@ -288,9 +288,9 @@ describe("SIMD128 instruction translation", () => {
       [10, 1, vectorBody.length, ...vectorBody],
     );
     expect(v8Validate(abi)).toBe(true);
-    expect(analyzeWasm(abi).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(abi, SHA, { boundsChecks: true })).toThrow(
-      "v128 function signatures",
+    expect(analyzeWasm(abi).status).toBe("valid");
+    expect(translateWasmModule(abi, SHA, { boundsChecks: true }).text.join("\n")).toContain(
+      "call void @scr_wasm_vector_js_error()",
     );
   });
 
@@ -392,7 +392,7 @@ describe("SIMD128 instruction translation", () => {
     expect(analyzeWasm(bytes).status).toBe("invalid");
   });
 
-  test("vector function references stay outside the scalar thunk ABI", () => {
+  test("vector function references retain native signatures with rejecting JS thunks", () => {
     const original = Buffer.from(
       simdFixtures.find((f) => f.name === "internal-vector-call")!.base64,
       "base64",
@@ -412,9 +412,9 @@ describe("SIMD128 instruction translation", () => {
       original.subarray(pos),
     ]);
     expect(v8Validate(bytes)).toBe(true);
-    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow(
-      "v128 function signatures",
+    expect(analyzeWasm(bytes).status).toBe("valid");
+    expect(translateWasmModule(bytes, SHA, { boundsChecks: true }).text.join("\n")).toContain(
+      "call void @scr_wasm_vector_js_error()",
     );
   });
 
@@ -512,7 +512,7 @@ describe("SIMD128 instruction translation", () => {
     expect(text.indexOf("icmp ugt i64")).toBeLessThan(text.indexOf("store volatile <16 x i8>"));
   });
 
-  test("relaxed SIMD keeps its unsupported status", () => {
+  test("relaxed SIMD lowers through its portable strict projection", () => {
     const instructions = [
       0,
       253,
@@ -534,8 +534,10 @@ describe("SIMD128 instruction translation", () => {
       [10, 1, instructions.length, ...instructions],
     );
     expect(v8Validate(bytes)).toBe(true);
-    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 256");
+    expect(analyzeWasm(bytes).status).toBe("valid");
+    expect(translateWasmModule(bytes, SHA, { boundsChecks: true }).text.join("\n")).toContain(
+      "extractelement",
+    );
   });
 
   test("seeded mutations never admit a SIMD module V8 rejects", () => {
@@ -563,4 +565,42 @@ describe("SIMD128 instruction translation", () => {
     expect(v8Validate(bytes)).toBe(false);
     expect(analyzeWasm(bytes).status).toBe("invalid");
   });
+});
+
+describe("SIMD native contract", () => {
+  const contract = JSON.parse(
+    readFileSync(
+      join(import.meta.dirname, "../../../../tests/wasm-spec/corpus/simd-contract.json"),
+      "utf8",
+    ),
+  ) as {
+    fixtures: Record<string, string>;
+    relaxed: { op: number; base64: string; expected: number[] }[];
+  };
+  for (const [name, base64] of Object.entries(contract.fixtures)) {
+    test(`validates and lowers ${name} in both bounds modes`, () => {
+      const bytes = Buffer.from(base64, "base64");
+      expect(v8Validate(bytes)).toBe(true);
+      expect(analyzeWasm(bytes).status).toBe("valid");
+      for (const boundsChecks of [false, true])
+        expect(() => translateWasmModule(bytes, SHA, { boundsChecks })).not.toThrow();
+    });
+  }
+  for (const f of contract.relaxed) {
+    test(`relaxed opcode ${f.op} validates and lowers with typed operands`, () => {
+      const bytes = Buffer.from(f.base64, "base64");
+      expect(v8Validate(bytes)).toBe(true);
+      expect(analyzeWasm(bytes).status).toBe("valid");
+      for (const boundsChecks of [false, true])
+        expect(() => translateWasmModule(bytes, SHA, { boundsChecks })).not.toThrow();
+      // Replace a v128.const with i32.const plus nops, preserving section sizes.
+      const bad = Buffer.from(bytes);
+      const at = bad.indexOf(Buffer.from([253, 12]));
+      bad[at] = 65;
+      bad[at + 1] = 0;
+      bad.fill(1, at + 2, at + 18);
+      expect(v8Validate(bad)).toBe(false);
+      expect(analyzeWasm(bad).status).toBe("invalid");
+    });
+  }
 });

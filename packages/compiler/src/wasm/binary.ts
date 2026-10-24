@@ -24,8 +24,8 @@
  * The decoder never evaluates anything and keeps no module contents beyond
  * the counts and the feature set it reports. It is plain TypeScript that
  * the native compiler also compiles. */
-import { hasVectorSignature, readMemargFlags } from "./module.js";
-import { simdIntegerOp, simdFloatOp } from "./simd.js";
+import { readMemargFlags } from "./module.js";
+import { simdIntegerOp, simdFloatOp, relaxedSimdArity } from "./simd.js";
 
 /** Proposals the summary can name, in report order. The first group is the
  * translatable set; the rest are reported as unsupported. */
@@ -49,6 +49,7 @@ export const WASM_FEATURES = [
 export type WasmFeature = (typeof WASM_FEATURES)[number];
 
 const TRANSLATABLE: ReadonlySet<string> = new Set([
+  "simd",
   "mutable-globals",
   "sign-extension",
   "nontrapping-fptoint",
@@ -601,7 +602,6 @@ class ModuleDecoder {
 
   globalType(r: Reader): Global {
     const type = this.valType(r);
-    if (type === V128) this.unsupportedSimd = true;
     if (type === FUNCREF || type === EXTERNREF) this.feature("reference-types");
     const mut = r.u8();
     if (mut > 1) r.malformed("malformed mutability");
@@ -1871,6 +1871,12 @@ class FunctionValidator {
     this.m.feature("simd");
     const start = r.pos;
     const sub = r.u32();
+    const relaxedArity = relaxedSimdArity(sub);
+    if (relaxedArity !== 0) {
+      for (let i = 0; i < relaxedArity; i++) this.popExpect(V128);
+      this.push(V128);
+      return;
+    }
     const floating = simdFloatOp(sub);
     if (floating !== null) {
       this.popExpect(V128);
@@ -2001,17 +2007,6 @@ export function analyzeWasm(bytes: Uint8Array): WasmModuleSummary {
   let error: string | null = null;
   try {
     m.decode();
-    // Internal native calls carry v128 directly. JavaScript/import/reference
-    // thunks still carry scalar slots, so no vector may reach those paths.
-    for (let f = 0; f < m.funcs.length; f++) {
-      const type = m.types[m.funcs[f]!];
-      if (
-        type !== undefined &&
-        hasVectorSignature(type) &&
-        (f < m.importedFuncs || m.declaredRefs.has(f))
-      )
-        m.unsupportedSimd = true;
-    }
   } catch (e) {
     if (!(e instanceof WasmError)) throw e;
     status = e.kind;

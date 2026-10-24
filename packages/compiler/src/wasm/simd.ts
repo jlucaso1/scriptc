@@ -140,3 +140,20 @@ export function simdFloatOp(sub: number): SimdFloatOp | null {
   }
   return null;
 }
+
+/** Strict operations chosen as fixed, portable relaxed projections. */
+export function relaxedSimdAlias(sub: number): number {
+  if (sub === 0x100) return 0x0e;
+  if (sub >= 0x101 && sub <= 0x104) return [0xf8, 0xf9, 0xfc, 0xfd][sub - 0x101]!;
+  if (sub >= 0x109 && sub <= 0x10c) return 0x52;
+  if (sub >= 0x10d && sub <= 0x110) return [0xe8, 0xe9, 0xf4, 0xf5][sub - 0x10d]!;
+  if (sub === 0x111) return 0x82;
+  return sub;
+}
+
+export function relaxedSimdArity(sub: number): number {
+  if (sub < 0x100 || sub > 0x113) return 0;
+  if (sub >= 0x101 && sub <= 0x104) return 1;
+  if ((sub >= 0x105 && sub <= 0x10c) || sub === 0x113) return 3;
+  return 2;
+}

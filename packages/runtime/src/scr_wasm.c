@@ -1159,6 +1159,9 @@ static ScrDyn *scr_wasm_function_value(ScrWasmInst *host, uint32_t func);
 /* ToJSValue (+1; NULL with an exception pending). */
 static ScrDyn *scr_wasm_to_js(char t, uint64_t v) {
   switch (t) {
+    case 'v':
+      scr_wasm_type_error("Can't get the value of s128 WebAssembly.Global");
+      return NULL;
     case 'i': return scr_dyn_new_num((double)(int32_t)(uint32_t)v);
     case 'I': {
       ScrBigInt *b = scr_bigint_from_i64((int64_t)v);
@@ -1211,6 +1214,9 @@ static ScrWasmFuncRef *scr_wasm_funcref_of(const ScrDyn *v);
 static bool scr_wasm_from_js_as(char t, const ScrDyn *v, uint64_t *out, const char *funcref_error) {
   if (!v) v = scr_dyn_undefined();
   switch (t) {
+    case 'v':
+      scr_wasm_type_error("Can't set the value of s128 WebAssembly.Global");
+      return false;
     case 'i': {
       double n;
       if (!scr_dyn_number_coerce_js(v, &n)) return false;
@@ -1288,6 +1294,11 @@ static ScrDyn *scr_wasm_export_call(ScrClosure *clo, ScrDyn *const *args, size_t
   ScrWasmInst *host = scr_box_get_ref(clo->caps[0]);
   uint32_t func = (uint32_t)scr_box_get_f64(clo->caps[1]);
   const char *sig = host->desc->func_sigs[func];
+  if (strchr(sig, 'v')) {
+    scr_wasm_type_error("type incompatibility when transforming from/to JS");
+    scr_wasm_inst_release(host);
+    return NULL;
+  }
   ScrWasmThunk thunk = NULL;
   for (uint64_t i = 0; i < host->desc->export_count; i++) {
     const ScrWasmExportDesc *ex = &host->desc->exports[i];
@@ -1369,6 +1380,20 @@ static ScrWasmFuncRef *scr_wasm_funcref_of(const ScrDyn *v) {
   uint32_t func = (uint32_t)scr_box_get_f64(clo->caps[1]);
   scr_wasm_inst_release(host);
   return &host->funcrefs[func];
+}
+
+/* A vector import can call another translated Wasm function, including
+ * another import stub, without converting its arguments or result to JS. */
+void scr_wasm_vector_js_error(void) {
+  scr_wasm_type_error("type incompatibility when transforming from/to JS");
+  scr_wasm_trap(SCR_WASM_TRAP_HOST);
+}
+
+void *scr_wasm_import_vector_ref(void *hostp, int32_t index) {
+  ScrWasmInst *host = hostp;
+  ScrWasmFuncRef *ref = scr_wasm_funcref_of(host->funcs[index]);
+  if (!ref) scr_wasm_vector_js_error();
+  return ref;
 }
 
 /* ── imported functions ──────────────────────────────────────────────── */
@@ -1897,6 +1922,9 @@ static ScrDyn *scr_wasm_instance_from(const ScrWasmModuleDesc *desc, ScrDyn *imp
         }
       } else if (mutable_) {
         scr_wasm_link_error(what, i, im, "imported mutable global must be a WebAssembly.Global object");
+        ok = false;
+      } else if (type == 'v') {
+        scr_wasm_link_error(what, i, im, "global import of type v128 must be a WebAssembly.Global");
         ok = false;
       } else if (type == 'r') {
         if (!v || (v->kind != SCR_DYN_NULL && !scr_wasm_funcref_of(v))) {
