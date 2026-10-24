@@ -21,6 +21,7 @@ export function run(modules, tests) {
     } catch (error) {
       if (!(error instanceof WebAssembly.RuntimeError)) throw error;
       trapped = true;
+      console.log("trap", test[3], error.message);
     }
     if (test[2] ? !trapped : trapped || value !== 1)
       throw new Error("SIMD assertion failed at " + test[3]);

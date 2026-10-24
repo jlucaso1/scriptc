@@ -1,0 +1,13 @@
+
+ RUN  v3.2.7 /workspace/scriptc-simd
+
+ ✓ tests/harness/llvm-differential.test.ts (3604 tests | 3603 skipped) 1907ms
+   ✓ llvm differential corpus (3604 programs, release+dev, sanitized) > webassembly-simd-abi/main.mjs  1885ms
+ ✓ tests/harness/differential.test.ts (3604 tests | 3603 skipped) 1190ms
+   ✓ differential corpus (3604 programs, sanitized) > webassembly-simd-abi/main.mjs  1181ms
+
+ Test Files  2 passed (2)
+      Tests  2 passed | 7206 skipped (7208)
+   Start at  00:47:25
+   Duration  15.35s (transform 6.96s, setup 0ms, collect 11.57s, tests 3.10s, environment 0ms, prepare 128ms)
+

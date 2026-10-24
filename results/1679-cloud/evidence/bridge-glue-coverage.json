@@ -1,0 +1,148 @@
+{
+  "schema": "scriptc-diagnostics",
+  "schemaVersion": 1,
+  "compilerVersion": "0.4.1",
+  "command": "coverage",
+  "entry": "/workspace/simd-bridge-full/main.mjs",
+  "success": false,
+  "phase": "preflight",
+  "groups": [
+    {
+      "id": "SC0001-f70e0b0b",
+      "code": "SC0001",
+      "category": "invalid-source",
+      "severity": "error",
+      "scope": "preflight",
+      "message": "Cannot find name 'ReadableByteStreamController'. Did you mean 'ReadableStreamDefaultController'?",
+      "hint": "fix the TypeScript error; scriptc only compiles programs that typecheck under its type world (strict null checks, the ES2025 library, Node types)",
+      "count": 2,
+      "primary": {
+        "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+        "line": 3859,
+        "column": 22
+      },
+      "sites": [
+        {
+          "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+          "line": 3859,
+          "column": 22
+        },
+        {
+          "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+          "line": 3860,
+          "column": 23
+        }
+      ]
+    },
+    {
+      "id": "SC0001-a31d4a6c",
+      "code": "SC0001",
+      "category": "invalid-source",
+      "severity": "error",
+      "scope": "preflight",
+      "message": "Cannot find name 'WritableStream'.",
+      "hint": "fix the TypeScript error; scriptc only compiles programs that typecheck under its type world (strict null checks, the ES2025 library, Node types)",
+      "count": 1,
+      "primary": {
+        "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+        "line": 4055,
+        "column": 55
+      },
+      "sites": [
+        {
+          "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+          "line": 4055,
+          "column": 55
+        }
+      ]
+    },
+    {
+      "id": "SC2013-52bc6262",
+      "code": "SC2013",
+      "category": "unsupported",
+      "severity": "error",
+      "scope": "preflight",
+      "message": "cannot compile npm package '@oxidezap/whatsapp-rust-bridge' statically: its shipped JS looks minified",
+      "hint": "to compile it anyway, name it with --npm-static=@oxidezap/whatsapp-rust-bridge (or --npm-static=@oxidezap/whatsapp-rust-bridge... to include its dependencies)",
+      "count": 1,
+      "primary": {
+        "file": "/workspace/simd-bridge-full/main.mjs",
+        "line": 2,
+        "column": 1
+      },
+      "sites": [
+        {
+          "file": "/workspace/simd-bridge-full/main.mjs",
+          "line": 2,
+          "column": 1
+        }
+      ]
+    }
+  ],
+  "diagnostics": [
+    {
+      "code": "SC0001",
+      "category": "invalid-source",
+      "severity": "error",
+      "scope": "preflight",
+      "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+      "line": 3859,
+      "column": 22,
+      "endLine": 3859,
+      "endColumn": 50,
+      "start": 189889,
+      "end": 189917,
+      "message": "Cannot find name 'ReadableByteStreamController'. Did you mean 'ReadableStreamDefaultController'?",
+      "hint": "fix the TypeScript error; scriptc only compiles programs that typecheck under its type world (strict null checks, the ES2025 library, Node types)",
+      "group": "SC0001-f70e0b0b"
+    },
+    {
+      "code": "SC0001",
+      "category": "invalid-source",
+      "severity": "error",
+      "scope": "preflight",
+      "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+      "line": 3860,
+      "column": 23,
+      "endLine": 3860,
+      "endColumn": 51,
+      "start": 189956,
+      "end": 189984,
+      "message": "Cannot find name 'ReadableByteStreamController'. Did you mean 'ReadableStreamDefaultController'?",
+      "hint": "fix the TypeScript error; scriptc only compiles programs that typecheck under its type world (strict null checks, the ES2025 library, Node types)",
+      "group": "SC0001-f70e0b0b"
+    },
+    {
+      "code": "SC0001",
+      "category": "invalid-source",
+      "severity": "error",
+      "scope": "preflight",
+      "file": "/workspace/simd-bridge-full/node_modules/@oxidezap/whatsapp-rust-bridge/dist/whatsapp_rust_bridge.d.ts",
+      "line": 4055,
+      "column": 55,
+      "endLine": 4055,
+      "endColumn": 69,
+      "start": 198788,
+      "end": 198802,
+      "message": "Cannot find name 'WritableStream'.",
+      "hint": "fix the TypeScript error; scriptc only compiles programs that typecheck under its type world (strict null checks, the ES2025 library, Node types)",
+      "group": "SC0001-a31d4a6c"
+    },
+    {
+      "code": "SC2013",
+      "category": "unsupported",
+      "severity": "error",
+      "scope": "preflight",
+      "file": "/workspace/simd-bridge-full/main.mjs",
+      "line": 2,
+      "column": 1,
+      "endLine": 2,
+      "endColumn": 72,
+      "start": 40,
+      "end": 111,
+      "message": "cannot compile npm package '@oxidezap/whatsapp-rust-bridge' statically: its shipped JS looks minified",
+      "hint": "to compile it anyway, name it with --npm-static=@oxidezap/whatsapp-rust-bridge (or --npm-static=@oxidezap/whatsapp-rust-bridge... to include its dependencies)",
+      "group": "SC2013-52bc6262"
+    }
+  ]
+}

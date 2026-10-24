@@ -1,0 +1,24 @@
+packages/cli-darwin-arm64                | [WARN] Unsupported platform: wanted: {"cpu":["arm64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-darwin-x64                  | [WARN] Unsupported platform: wanted: {"cpu":["x64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-linux-arm64-gnu             | [WARN] Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["glibc"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-linux-arm64-musl            | [WARN] Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["musl"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-linux-x64-musl              | [WARN] Unsupported platform: wanted: {"cpu":["x64"],"os":["linux"],"libc":["musl"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-win32-x64-msvc              | [WARN] Unsupported platform: wanted: {"cpu":["x64"],"os":["win32"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-darwin-arm64               | [WARN] Unsupported platform: wanted: {"cpu":["arm64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-darwin-x64                 | [WARN] Unsupported platform: wanted: {"cpu":["x64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-linux-arm64-gnu            | [WARN] Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-linux-arm64-musl           | [WARN] Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-win32-x64-msvc             | [WARN] Unsupported platform: wanted: {"cpu":["x64"],"os":["win32"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+$ node scripts/build.mjs
+building @scriptc/runtime-linux-x64-gnu release runtime
+building @scriptc/runtime-linux-x64-gnu dev runtime
+building @scriptc/runtime-linux-x64-gnu library-release runtime
+building @scriptc/runtime-linux-x64-gnu library-thread-release runtime
+building @scriptc/runtime-linux-x64-gnu library-dev runtime
+building @scriptc/runtime-linux-x64-gnu library-thread-dev runtime
+building @scriptc/runtime-linux-x64-gnu speed runtime
+building @scriptc/runtime-linux-x64-gnu quickjs archive
+building @scriptc/runtime-linux-x64-gnu libregexp archive
+building @scriptc/runtime-linux-x64-gnu zlib archive
+building @scriptc/runtime-linux-x64-gnu mbedtls archive
+built @scriptc/runtime-linux-x64-gnu@0.4.1: 7 flavors, 4 vendor archives
