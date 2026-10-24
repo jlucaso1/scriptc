@@ -593,6 +593,7 @@ async function compileExecutableNative(
     fetch: features.fetch,
     ...(features.eventTarget ? { eventTarget: true } : {}),
     ...(features.wasm ? { wasm: true } : {}),
+    ...(features.wasmVectors ? { wasmVectors: true } : {}),
     ...(features.warningReplace ? { warningReplace: true } : {}),
     ...(features.stdioExtended ? { stdioExtended: true } : {}),
     zlib: features.zlib,

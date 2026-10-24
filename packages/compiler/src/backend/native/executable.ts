@@ -381,6 +381,7 @@ const RUNTIME_DEFINES: readonly {
   // Checked objects carry the dynamic tier's shapes (scr_json.c's SCR_JS_TIER build); only
   // programs with dynamic-tier code select it.
   { define: "SCR_JS_TIER", when: (opts) => opts.dynTier === true },
+  { define: "SCR_WASM_SCALAR_RUNTIME", when: (opts) => opts.wasm && !opts.wasmVectors },
   { define: "SCR_WARNING_REPLACE", when: (opts) => opts.warningReplace },
   { define: "SCR_STDIO_EXTENDED", when: (opts) => opts.stdioExtended },
   { define: "SCR_YIN", when: (opts) => opts.youngNursery },

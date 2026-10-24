@@ -50,6 +50,7 @@ import {
   WasmCursor,
   parseWasmModule,
   hasVectorSignature,
+  hasVectorInterfaces,
   readMemargFlags,
   skipImmediates,
   type WasmFuncType,
@@ -758,7 +759,7 @@ class ModuleTranslator {
     const fields = [
       `[32 x i8] [${sha.join(", ")}]`,
       `i64 ${m.bytes.length}`,
-      `i64 ${m.globals.some((g) => g.type === VAL_V128) || m.funcTypes.some((type) => hasVectorSignature(m.types[type]!)) ? WASM_ABI_VERSION : WASM_SCALAR_ABI_VERSION}`,
+      `i64 ${hasVectorInterfaces(m) ? WASM_ABI_VERSION : WASM_SCALAR_ABI_VERSION}`,
       `i64 ${this.opts.boundsChecks ? 1 : 0}`,
       `i64 ${m.imports.length}`,
       `ptr ${importsSym}`,

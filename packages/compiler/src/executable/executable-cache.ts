@@ -60,6 +60,7 @@ export interface EarlyExecutableNativeFeatures {
   fetch: boolean;
   eventTarget?: boolean;
   wasm?: boolean;
+  wasmVectors?: boolean;
   warningReplace?: boolean;
   stdioExtended?: boolean;
   zlib: boolean;

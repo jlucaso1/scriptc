@@ -76,6 +76,7 @@ test.skipIf(process.platform !== "linux" && process.platform !== "darwin")(
               youngNursery: false,
               eventTarget: false,
               wasm: false,
+              wasmVectors: false,
               dynTier: false,
               streamDyn: false,
               handleProps: false,

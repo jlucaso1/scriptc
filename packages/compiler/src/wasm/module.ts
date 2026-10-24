@@ -692,3 +692,11 @@ function noteConstRefs(m: WasmModule, expr: WasmRange): void {
     skipImmediates(c, op);
   }
 }
+
+/** The ABI3 storage/call contract, shared by descriptor and runtime selection. */
+export function hasVectorInterfaces(module: WasmModule): boolean {
+  return (
+    module.globals.some((global) => global.type === VAL_V128) ||
+    module.funcTypes.some((index) => hasVectorSignature(module.types[index]!))
+  );
+}
