@@ -59,7 +59,7 @@ const TRANSLATABLE: ReadonlySet<string> = new Set([
   "extended-const",
 ]);
 
-/** True for proposals supported as a whole. SIMD support is module-specific. */
+/** True for proposals inside the translatable feature level. */
 export function isTranslatableFeature(feature: string): boolean {
   return TRANSLATABLE.has(feature);
 }
@@ -411,8 +411,6 @@ class ModuleDecoder {
   sawCode = false;
   /** A type definition outside the function-type subset stopped typing. */
   gcTypes = false;
-  /** A SIMD instruction or value use outside the implemented subset was found. */
-  unsupportedSimd = false;
 
   constructor(bytes: Uint8Array) {
     this.bytes = bytes;
@@ -1865,11 +1863,10 @@ class FunctionValidator {
     }
   }
 
-  /** Validate the implemented SIMD subset without disabling scalar stack typing. */
+  /** Validate standard and relaxed SIMD on the normal operand/control stack. */
   prefixSimd(): void {
     const r = this.r;
     this.m.feature("simd");
-    const start = r.pos;
     const sub = r.u32();
     const relaxedArity = relaxedSimdArity(sub);
     if (relaxedArity !== 0) {
@@ -1901,14 +1898,7 @@ class FunctionValidator {
       this.push(integer.kind === "all-true" || integer.kind === "bitmask" ? I32 : V128);
       return;
     }
-    if (sub > 34 && (sub < 77 || sub > 93)) {
-      if (sub < 0x100 || sub > 0x113) r.malformed(`illegal opcode 0xfd ${sub}`);
-      this.m.unsupportedSimd = true;
-      this.typed = false;
-      r.pos = start;
-      this.scanSimd();
-      return;
-    }
+    if (sub > 34 && (sub < 77 || sub > 93)) r.malformed(`illegal opcode 0xfd ${sub}`);
     if (sub <= 11 || (sub >= 84 && sub <= 93)) {
       const align =
         sub === 0 || sub === 11
@@ -1965,7 +1955,6 @@ class FunctionValidator {
   }
 
   scanSimd(): void {
-    this.m.unsupportedSimd = true;
     const r = this.r;
     const sub = r.u32();
     if (sub <= 11 || sub === 92 || sub === 93) {
@@ -2017,8 +2006,7 @@ export function analyzeWasm(bytes: Uint8Array): WasmModuleSummary {
   for (const feature of WASM_FEATURES) {
     if (!m.features.has(feature)) continue;
     features.push(feature);
-    if (feature === "simd" ? m.unsupportedSimd : !TRANSLATABLE.has(feature))
-      unsupported.push(feature);
+    if (!TRANSLATABLE.has(feature)) unsupported.push(feature);
   }
   if (status === "valid" && unsupported.length > 0) status = "unsupported";
   return {
