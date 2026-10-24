@@ -38,6 +38,7 @@ export const WASM_FEATURES = [
   "reference-types",
   "extended-const",
   "simd",
+  "relaxed-simd",
   "threads",
   "exceptions",
   "tail-call",
@@ -50,6 +51,7 @@ export type WasmFeature = (typeof WASM_FEATURES)[number];
 
 const TRANSLATABLE: ReadonlySet<string> = new Set([
   "simd",
+  "relaxed-simd",
   "mutable-globals",
   "sign-extension",
   "nontrapping-fptoint",
@@ -1870,6 +1872,7 @@ class FunctionValidator {
     const sub = r.u32();
     const relaxedArity = relaxedSimdArity(sub);
     if (relaxedArity !== 0) {
+      this.m.feature("relaxed-simd");
       for (let i = 0; i < relaxedArity; i++) this.popExpect(V128);
       this.push(V128);
       return;
@@ -1957,6 +1960,7 @@ class FunctionValidator {
   scanSimd(): void {
     const r = this.r;
     const sub = r.u32();
+    if (sub >= 0x100 && sub <= 0x113) this.m.feature("relaxed-simd");
     if (sub <= 11 || sub === 92 || sub === 93) {
       this.scanMemarg();
       return;
