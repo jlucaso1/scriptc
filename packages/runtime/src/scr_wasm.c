@@ -1160,7 +1160,7 @@ static ScrDyn *scr_wasm_function_value(ScrWasmInst *host, uint32_t func);
 static ScrDyn *scr_wasm_to_js(char t, uint64_t v) {
   switch (t) {
     case 'v':
-      scr_wasm_type_error("Can't get the value of s128 WebAssembly.Global");
+      scr_wasm_type_error("type incompatibility when transforming from/to JS");
       return NULL;
     case 'i': return scr_dyn_new_num((double)(int32_t)(uint32_t)v);
     case 'I': {
@@ -1215,7 +1215,7 @@ static bool scr_wasm_from_js_as(char t, const ScrDyn *v, uint64_t *out, const ch
   if (!v) v = scr_dyn_undefined();
   switch (t) {
     case 'v':
-      scr_wasm_type_error("Can't set the value of s128 WebAssembly.Global");
+      scr_wasm_type_error("type incompatibility when transforming from/to JS");
       return false;
     case 'i': {
       double n;
@@ -1474,7 +1474,14 @@ static ScrDyn *scr_wasm_memory_buffer(ScrWasmMemory *m) {
   return scr_dyn_retain(m->buffer);
 }
 
-static ScrDyn *scr_wasm_global_value(ScrWasmGlobal *g) { return scr_wasm_to_js(g->type, g->value); }
+static ScrDyn *scr_wasm_global_value(ScrWasmGlobal *g, bool value_of) {
+  if (g->type == 'v') {
+    scr_wasm_type_error(value_of ? "WebAssembly.Global.valueOf(): Can't get the value of s128 WebAssembly.Global"
+                                 : "get WebAssembly.Global.value): Can't get the value of s128 WebAssembly.Global");
+    return NULL;
+  }
+  return scr_wasm_to_js(g->type, g->value);
+}
 
 static ScrDyn *scr_wasm_get(void *h, const char *key, size_t len) {
   ScrWasmObj *o = h;
@@ -1489,7 +1496,7 @@ static ScrDyn *scr_wasm_get(void *h, const char *key, size_t len) {
       if (len == 6 && !memcmp(key, "length", 6)) return scr_dyn_new_num(o->table->size);
       return NULL;
     case SCR_WASM_K_GLOBAL:
-      if (len == 5 && !memcmp(key, "value", 5)) return scr_wasm_global_value(o->global);
+      if (len == 5 && !memcmp(key, "value", 5)) return scr_wasm_global_value(o->global, false);
       return NULL;
     default:
       return NULL;
@@ -1499,6 +1506,10 @@ static ScrDyn *scr_wasm_get(void *h, const char *key, size_t len) {
 static bool scr_wasm_global_assign(ScrWasmGlobal *g, const ScrDyn *value) {
   if (!g->mutable_) {
     scr_wasm_type_error("set WebAssembly.Global.value): Can't set the value of an immutable global.");
+    return false;
+  }
+  if (g->type == 'v') {
+    scr_wasm_type_error("set WebAssembly.Global.value): Can't set the value of s128 WebAssembly.Global");
     return false;
   }
   uint64_t v;
@@ -1611,7 +1622,7 @@ static ScrDyn *scr_wasm_invoke(void *h, ScrDyn *self, const char *method, ScrDyn
       return scr_dyn_new_num((double)old);
     }
   }
-  if (o->kind == SCR_WASM_K_GLOBAL && !strcmp(method, "valueOf")) return scr_wasm_global_value(o->global);
+  if (o->kind == SCR_WASM_K_GLOBAL && !strcmp(method, "valueOf")) return scr_wasm_global_value(o->global, true);
   char msg[200];
   snprintf(msg, sizeof msg, "%s is not a function", what ? what : method);
   scr_wasm_type_error(msg);
@@ -1685,7 +1696,7 @@ static const ScrWasmModuleDesc *scr_wasm_lookup(const uint8_t *data, size_t len)
   bool hashed = false;
   for (uint64_t i = 0; i < scr_wasm_registry.count; i++) {
     const ScrWasmModuleDesc *d = scr_wasm_registry.modules[i];
-    if (d->byte_length != len || d->abi_version != SCR_WASM_ABI_VERSION) continue;
+    if (d->byte_length != len || (d->abi_version != SCR_WASM_ABI_VERSION && d->abi_version != SCR_WASM_SCALAR_ABI_VERSION)) continue;
     if (!hashed) {
       scr_wasm_sha256(data, len, digest);
       hashed = true;
@@ -2374,7 +2385,7 @@ ScrDyn *scr_wasm_module_custom_sections(ScrDyn *module, ScrDyn *name) {
  * other value answers what the generic valueOf answers. */
 ScrDyn *scr_wasm_value_of(ScrDyn *value) {
   ScrWasmObj *g = scr_wasm_unbox(value, SCR_WASM_K_GLOBAL);
-  if (g) return scr_wasm_global_value(g->global);
+  if (g) return scr_wasm_global_value(g->global, true);
   ScrStr *what = scr_str_new("valueOf", 7);
   ScrDyn *out = scr_dyn_value_of(value, what);
   scr_str_release(what);

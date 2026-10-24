@@ -36,7 +36,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define SCR_WASM_ABI_VERSION 2
+#define SCR_WASM_ABI_VERSION 3
+/* Scalar descriptors keep the same slots and layout as ABI 2. */
+#define SCR_WASM_SCALAR_ABI_VERSION 2
 
 enum { SCR_WASM_FUNC = 0, SCR_WASM_TABLE = 1, SCR_WASM_MEMORY = 2, SCR_WASM_GLOBAL = 3 };
 

@@ -73,7 +73,8 @@ export const TRAP_NULL = 9;
 export const TRAP_EXHAUSTION = 100;
 
 /** The descriptor ABI version both sides agree on. */
-export const WASM_ABI_VERSION = 2;
+export const WASM_ABI_VERSION = 3;
+const WASM_SCALAR_ABI_VERSION = 2;
 
 /** Instance slot offsets (bytes). */
 const OFF_MEMBASE = 8;
@@ -757,7 +758,7 @@ class ModuleTranslator {
     const fields = [
       `[32 x i8] [${sha.join(", ")}]`,
       `i64 ${m.bytes.length}`,
-      `i64 ${WASM_ABI_VERSION}`,
+      `i64 ${m.globals.some((g) => g.type === VAL_V128) || m.funcTypes.some((type) => hasVectorSignature(m.types[type]!)) ? WASM_ABI_VERSION : WASM_SCALAR_ABI_VERSION}`,
       `i64 ${this.opts.boundsChecks ? 1 : 0}`,
       `i64 ${m.imports.length}`,
       `ptr ${importsSym}`,
