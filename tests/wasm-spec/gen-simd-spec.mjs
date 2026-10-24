@@ -36,7 +36,11 @@ function compare(expected, local){
  const t=expected[0].split('.')[0],v=expected[1];
  if(t==='f32'||t==='f64'){
   const bits=t.slice(1),it='i'+bits;
-  if(v==='nan:canonical'||v==='nan:arithmetic')return compare(['v128.const',`${t}x${128/Number(bits)}`,...Array(128/Number(bits)).fill(v)],local);
+  if(v==='nan:canonical'||v==='nan:arithmetic'){
+   const value=`(${it}.reinterpret_${t} (local.get ${local}))`;
+   const mask=v==='nan:canonical'?(bits==='32'?'0x7fffffff':'0x7fffffffffffffff'):(bits==='32'?'0x7fc00000':'0x7ff8000000000000');
+   return `(${it}.eq (${it}.and ${value} (${it}.const ${mask})) (${it}.const ${bits==='32'?'0x7fc00000':'0x7ff8000000000000'}))`;
+  }
   return `(${it}.eq (${it}.reinterpret_${t} (local.get ${local})) (${it}.reinterpret_${t} ${print(expected)}))`;
  }
  return `(${t}.eq (local.get ${local}) ${print(expected)})`;
