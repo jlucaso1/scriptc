@@ -228,7 +228,8 @@ typedef struct ScrWasmTable {
 
 /* A global's cell: the value in the low bytes of `value`. */
 typedef struct ScrWasmGlobal {
-  uint64_t value; /* 0 */
+  uint64_t value; /* 0, low half of v128 */
+  uint64_t value_high; /* 8, high half of v128 */
   size_t rc;
   char type;
   bool mutable_;
