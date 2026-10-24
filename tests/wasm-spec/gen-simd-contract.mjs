@@ -30,7 +30,7 @@ for(let op=0x100;op<=0x113;op++) {
  const arity=op>=0x101&&op<=0x104?1:op>=0x105&&op<=0x10c||op===0x113?3:2;
  const bits=op===0x103||op===0x104||op===0x107||op===0x108||op===0x10f||op===0x110?64:32;
  const floating=op>=0x101&&op<=0x108||op>=0x10d&&op<=0x110;
- const a=floating?lanes(bits,[1.5,-2],true):lanes(8,[1,2,3,4]);
+ const a=floating?lanes(bits,[1.5,op===0x102||op===0x104?3000000000:-2],true):lanes(8,[1,2,3,4]);
  const b=floating?lanes(bits,[2,4],true):lanes(8,[3,2,1,0]);
  const c=floating?lanes(bits,[0.5,1],true):new Array(16).fill(255);
  const operands=[a,b,c].slice(0,arity).flatMap(v);

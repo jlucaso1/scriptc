@@ -57,24 +57,24 @@
     },
     {
       "op": 258,
-      "base64": "AGFzbQEAAAABBAFgAAADAgEABQMBAAEHEAIDcnVuAAAGbWVtb3J5AgAKHwEdAEEA/QwAAMA/AAAAwAAAwD8AAADA/YIC/QsAAAs=",
+      "base64": "AGFzbQEAAAABBAFgAAADAgEABQMBAAEHEAIDcnVuAAAGbWVtb3J5AgAKHwEdAEEA/QwAAMA/XtAyTwAAwD9e0DJP/YIC/QsAAAs=",
       "expected": [
         1,
         0,
         0,
         0,
         0,
-        0,
-        0,
-        0,
+        94,
+        208,
+        178,
         1,
         0,
         0,
         0,
         0,
-        0,
-        0,
-        0
+        94,
+        208,
+        178
       ]
     },
     {
@@ -101,16 +101,16 @@
     },
     {
       "op": 260,
-      "base64": "AGFzbQEAAAABBAFgAAADAgEABQMBAAEHEAIDcnVuAAAGbWVtb3J5AgAKHwEdAEEA/QwAAAAAAAD4PwAAAAAAAADA/YQC/QsAAAs=",
+      "base64": "AGFzbQEAAAABBAFgAAADAgEABQMBAAEHEAIDcnVuAAAGbWVtb3J5AgAKHwEdAEEA/QwAAAAAAAD4PwAAAMALWuZB/YQC/QsAAAs=",
       "expected": [
         1,
         0,
         0,
         0,
         0,
-        0,
-        0,
-        0,
+        94,
+        208,
+        178,
         0,
         0,
         0,
