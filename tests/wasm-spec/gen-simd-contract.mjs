@@ -7,7 +7,7 @@ const str=s=>[...u(s.length),...Buffer.from(s)];
 const fd=(op,...imm)=>[253,...u(op),...imm];
 const v=bytes=>fd(12,...bytes);
 const type=(p,r)=>[96,...vec(p.map(x=>[x])),...vec(r.map(x=>[x]))];
-const fn=ops=>{const b=[0,...ops,11];return [...u(b.length),...b];};
+const fn=(ops,locals=[0])=>{const b=[...locals,...ops,11];return [...u(b.length),...b];};
 const ex=(name,kind,index)=>[...str(name),kind,...u(index)];
 const imp=(name,kind,desc)=>[...str('m'),...str(name),kind,...desc];
 const module=(...sections)=>Buffer.from([0,97,115,109,1,0,0,0,...sections.flat()]).toString('base64');
@@ -22,6 +22,9 @@ fixtures.vectorResult=module(sec(1,vec([type([],[123])])),sec(3,vec([[0]])),sec(
 fixtures.importResult=module(sec(1,vec([type([],[123]),type([],[127])])),sec(2,vec([imp('f',0,[0])])),sec(3,vec([[1]])),sec(7,vec([ex('run',0,1)])),sec(10,vec([fn([16,0,...fd(27,0)])])));
 fixtures.immutable=module(sec(6,vec([[123,0,...v(pattern),11]])),sec(7,vec([ex('g',3,0)])));
 fixtures.importImmutable=module(sec(1,vec([type([],[127])])),sec(2,vec([imp('g',3,[123,0])])),sec(3,vec([[0]])),sec(7,vec([ex('low',0,0)])),sec(10,vec([fn([35,0,...fd(27,0)])])));
+fixtures.mixedProvider=module(sec(1,vec([type([127,123,126],[123,127,126])])),sec(3,vec([[0]])),sec(7,vec([ex('f',0,0)])),sec(10,vec([fn([32,1,32,0,32,2])])));
+fixtures.mixedConsumer=module(sec(1,vec([type([127,123,126],[123,127,126]),type([],[127])])),sec(2,vec([imp('f',0,[0])])),sec(3,vec([[1]])),sec(7,vec([ex('f',0,0),ex('run',0,1)])),sec(10,vec([fn([65,19,...v(lanes(32,[1,2,3,4])),66,23,16,0,33,2,33,1,33,0,32,0,...fd(27,3),32,1,106,32,2,167,106],[3,1,123,1,127,1,126])])));
+fixtures.vectorTrap=module(sec(1,vec([type([123],[123])])),sec(3,vec([[0]])),sec(7,vec([ex('f',0,0)])),sec(10,vec([fn([0])])));
 const relaxed=[];
 for(let op=0x100;op<=0x113;op++) {
  const arity=op>=0x101&&op<=0x104?1:op>=0x105&&op<=0x10c||op===0x113?3:2;
@@ -63,6 +66,13 @@ const js=make('consumer',{m:{f:()=>{called++;},g:a.g}});
 attempt('JS-vector-import',()=>js.run());
 const jsResult=make('importResult',{m:{f:()=>{called++;return 1}}});
 attempt('JS-vector-result-import',()=>jsResult.run());
+const mixed=make('mixedConsumer',{m:make('mixedProvider')});
+console.log('mixed-multivalue',mixed.run());
+let coerced=0;
+attempt('vector-before-coercion',()=>mixed.f({valueOf(){coerced++;return 1;}}));
+console.log('coercions',coerced);
+attempt('native-vector-trap',()=>make('consumer',{m:{f:make('vectorTrap').f,g:a.g}}).run());
+attempt('construct-vector-global',()=>new WebAssembly.Global(JSON.parse('{"value":"v128"}')));
 console.log('JS-calls',called);
 for(const r of relaxed) {
  const x=new WebAssembly.Instance(new WebAssembly.Module(Buffer.from(r.base64,'base64'))).exports;x.run();
