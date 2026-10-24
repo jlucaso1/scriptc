@@ -75,7 +75,7 @@ for(const group of Object.keys(groups))for(const file of readdirSync(join(spec,'
  flush();
 }
 const destination=new URL('./corpus/simd-spec.json',import.meta.url);
-writeFileSync(destination,JSON.stringify({source:{repository:'WebAssembly/spec',sha,wabt:'1.0.39'},stats,groups,invalid},null,2)+'\n');
+writeFileSync(destination,JSON.stringify({source:{repository:'WebAssembly/spec',sha,wabt:'1.0.39'},stats,groups:Object.fromEntries(Object.entries(groups).map(([group,modules])=>[group,modules.map(({tests,...module})=>({...module,assertions:tests.length}))])),invalid},null,2)+'\n');
 for(const [group,all] of Object.entries(groups))for(let start=0;start<all.length;start+=16){
  const modules=all.slice(start,start+16);
  const part=String(start/16+1).padStart(2,'0');
