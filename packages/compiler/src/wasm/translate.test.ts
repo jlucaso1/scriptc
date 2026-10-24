@@ -278,7 +278,7 @@ describe("SIMD128 instruction translation", () => {
     },
   );
 
-  test("keeps scalar runtime ABI boundaries outside the supported subset", () => {
+  test("emits a native slot thunk for exported vector functions", () => {
     const vector = [253, 12, ...new Array<number>(16).fill(0)];
     const vectorBody = [0, ...vector, 11];
     const abi = wasmModule(
@@ -288,9 +288,9 @@ describe("SIMD128 instruction translation", () => {
       [10, 1, vectorBody.length, ...vectorBody],
     );
     expect(v8Validate(abi)).toBe(true);
-    expect(analyzeWasm(abi).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(abi, SHA, { boundsChecks: true })).toThrow(
-      "v128 function signatures",
+    expect(analyzeWasm(abi).status).toBe("valid");
+    expect(translateWasmModule(abi, SHA, { boundsChecks: true }).text.join("\n")).toContain(
+      "store <16 x i8>",
     );
   });
 
@@ -392,7 +392,7 @@ describe("SIMD128 instruction translation", () => {
     expect(analyzeWasm(bytes).status).toBe("invalid");
   });
 
-  test("vector function references stay outside the scalar thunk ABI", () => {
+  test("vector function references have native slot thunks", () => {
     const original = Buffer.from(
       simdFixtures.find((f) => f.name === "internal-vector-call")!.base64,
       "base64",
@@ -412,9 +412,9 @@ describe("SIMD128 instruction translation", () => {
       original.subarray(pos),
     ]);
     expect(v8Validate(bytes)).toBe(true);
-    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
-    expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow(
-      "v128 function signatures",
+    expect(analyzeWasm(bytes).status).toBe("valid");
+    expect(translateWasmModule(bytes, SHA, { boundsChecks: true }).text.join("\n")).toContain(
+      "load <16 x i8>",
     );
   });
 
@@ -534,7 +534,7 @@ describe("SIMD128 instruction translation", () => {
       [10, 1, instructions.length, ...instructions],
     );
     expect(v8Validate(bytes)).toBe(true);
-    expect(analyzeWasm(bytes).unsupported).toEqual(["simd"]);
+    expect(analyzeWasm(bytes).unsupported).toEqual(["relaxed-simd"]);
     expect(() => translateWasmModule(bytes, SHA, { boundsChecks: true })).toThrow("0xfd 256");
   });
 

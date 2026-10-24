@@ -73,7 +73,7 @@ export const TRAP_NULL = 9;
 export const TRAP_EXHAUSTION = 100;
 
 /** The descriptor ABI version both sides agree on. */
-export const WASM_ABI_VERSION = 2;
+export const WASM_ABI_VERSION = 3;
 
 /** Instance slot offsets (bytes). */
 const OFF_MEMBASE = 8;
@@ -350,14 +350,12 @@ class ModuleTranslator {
     const out: string[] = [];
     out.push(`define internal ${this.signature(ft, this.fn(index))} nounwind {`);
     out.push(`entry:`);
-    const np = Math.max(1, ft.params.length);
-    const nr = Math.max(1, ft.results.length);
+    const np = Math.max(1, slotCount(ft.params));
+    const nr = Math.max(1, slotCount(ft.results));
     out.push(`  %args = alloca [${np} x i64], align 8`);
     out.push(`  %res = alloca [${nr} x i64], align 8`);
     for (let i = 0; i < ft.params.length; i++) {
-      const slot = toSlot(out, ft.params[i]!, `%p${i}`, `a${i}`);
-      out.push(`  %ap${i} = getelementptr i64, ptr %args, i64 ${i}`);
-      out.push(`  store i64 ${slot}, ptr %ap${i}`);
+      storeSlot(out, ft.params, i, `%p${i}`, "%args", "a");
     }
     out.push(`  %host = load ptr, ptr %inst`);
     out.push(`  call void @scr_wasm_import_call(ptr %host, i32 ${index}, ptr %args, ptr %res)`);
@@ -375,9 +373,7 @@ class ModuleTranslator {
     out.push(`entry:`);
     const args: string[] = ["ptr %inst"];
     for (let i = 0; i < ft.params.length; i++) {
-      out.push(`  %ap${i} = getelementptr i64, ptr %a, i64 ${i}`);
-      out.push(`  %as${i} = load i64, ptr %ap${i}`);
-      args.push(`${llType(ft.params[i]!)} ${fromSlot(out, ft.params[i]!, `%as${i}`, `a${i}`)}`);
+      args.push(`${llType(ft.params[i]!)} ${loadSlot(out, ft.params, i, "%a", "a")}`);
     }
     const ret = retType(ft.results);
     if (ft.results.length === 0) {
@@ -390,9 +386,7 @@ class ModuleTranslator {
           out.push(`  %rv${i} = extractvalue ${ret} %res, ${i}`);
           v = `%rv${i}`;
         }
-        const slot = toSlot(out, ft.results[i]!, v, `r${i}`);
-        out.push(`  %rp${i} = getelementptr i64, ptr %r, i64 ${i}`);
-        out.push(`  store i64 ${slot}, ptr %rp${i}`);
+        storeSlot(out, ft.results, i, v, "%r", "r");
       }
     }
     out.push(`  ret void`);
@@ -413,9 +407,7 @@ class ModuleTranslator {
     out.push(`entry:`);
     const args: string[] = ["ptr %inst"];
     for (let i = 0; i < ft.params.length; i++) {
-      out.push(`  %ap${i} = getelementptr i64, ptr %a, i64 ${i}`);
-      out.push(`  %as${i} = load i64, ptr %ap${i}`);
-      args.push(`${llType(ft.params[i]!)} ${fromSlot(out, ft.params[i]!, `%as${i}`, `a${i}`)}`);
+      args.push(`${llType(ft.params[i]!)} ${loadSlot(out, ft.params, i, "%a", "a")}`);
     }
     const ret = retType(ft.results);
     if (ft.results.length === 0) {
@@ -428,9 +420,7 @@ class ModuleTranslator {
           out.push(`  %rv${i} = extractvalue ${ret} %res, ${i}`);
           v = `%rv${i}`;
         }
-        const slot = toSlot(out, ft.results[i]!, v, `r${i}`);
-        out.push(`  %rp${i} = getelementptr i64, ptr %r, i64 ${i}`);
-        out.push(`  store i64 ${slot}, ptr %rp${i}`);
+        storeSlot(out, ft.results, i, v, "%r", "r");
       }
     }
     out.push(`  ret void`);
@@ -458,7 +448,7 @@ class ModuleTranslator {
         // value; the runtime's setter retains it.
         body.add(`  call void @scr_wasm_global_set_ref(ptr ${cell}, ptr ${v})`);
       } else {
-        body.add(`  store ${llType(global.type)} ${v}, ptr ${cell}`);
+        body.add(`  store ${llType(global.type)} ${v}, ptr ${cell}, align 8`);
       }
     }
     // Defined tables with an initializer.
@@ -597,9 +587,9 @@ class ModuleTranslator {
     for (let f = 0; f < nf; f++) {
       const referenced = this.refs.has(f);
       codes.push(referenced ? `ptr ${this.fn(f)}` : "ptr null");
-      // Referenced functions the module does not export reach JavaScript
-      // through their signature's call thunk.
-      if (referenced && !thunks.has(f)) {
+      // Non-exported references need a call thunk for JavaScript. Vector
+      // references also need it for native cross-instance import calls.
+      if (referenced && (!thunks.has(f) || hasVectorSignature(this.funcType(f)))) {
         const type = m.funcTypes[f]!;
         let thunk = callThunkSyms.get(type);
         if (thunk === undefined) {
@@ -775,6 +765,53 @@ class ModuleTranslator {
   }
 }
 
+/** Scalar values occupy one i64 slot; vectors occupy two adjacent slots.
+ * Loads/stores use align 8 because the slot buffer need not be 16-byte aligned. */
+function slotCount(types: readonly number[]): number {
+  let count = 0;
+  for (const t of types) count += t === VAL_V128 ? 2 : 1;
+  return count;
+}
+
+function slotOffset(types: readonly number[], index: number): number {
+  let offset = 0;
+  for (let i = 0; i < index; i++) offset += types[i] === VAL_V128 ? 2 : 1;
+  return offset;
+}
+
+function loadSlot(
+  out: string[],
+  types: readonly number[],
+  i: number,
+  buffer: string,
+  prefix: string,
+): string {
+  const tag = `${prefix}${i}`;
+  const t = types[i]!;
+  out.push(`  %${tag}p = getelementptr i64, ptr ${buffer}, i64 ${slotOffset(types, i)}`);
+  if (t === VAL_V128) {
+    out.push(`  %${tag}v = load <16 x i8>, ptr %${tag}p, align 8`);
+    return `%${tag}v`;
+  }
+  out.push(`  %${tag}s = load i64, ptr %${tag}p`);
+  return fromSlot(out, t, `%${tag}s`, tag);
+}
+
+function storeSlot(
+  out: string[],
+  types: readonly number[],
+  i: number,
+  v: string,
+  buffer: string,
+  prefix: string,
+): void {
+  const tag = `${prefix}${i}`;
+  const t = types[i]!;
+  const slot = t === VAL_V128 ? v : toSlot(out, t, v, tag);
+  out.push(`  %${tag}p = getelementptr i64, ptr ${buffer}, i64 ${slotOffset(types, i)}`);
+  out.push(`  store ${t === VAL_V128 ? "<16 x i8>" : "i64"} ${slot}, ptr %${tag}p, align 8`);
+}
+
 /** Store a value as a 64-bit slot; answers the slot operand. */
 function toSlot(out: string[], t: number, v: string, tag: string): string {
   switch (t) {
@@ -823,9 +860,7 @@ function emitSlotReturn(out: string[], results: readonly number[], buffer: strin
   }
   const vals: string[] = [];
   for (let i = 0; i < results.length; i++) {
-    out.push(`  %rp${i} = getelementptr i64, ptr ${buffer}, i64 ${i}`);
-    out.push(`  %rs${i} = load i64, ptr %rp${i}`);
-    vals.push(fromSlot(out, results[i]!, `%rs${i}`, `r${i}`));
+    vals.push(loadSlot(out, results, i, buffer, "r"));
   }
   if (results.length === 1) {
     out.push(`  ret ${llType(results[0]!)} ${vals[0]}`);
@@ -1070,7 +1105,14 @@ class FunctionTranslator {
         case 0x23: {
           const g = c.u32();
           const cell = this.loadPtrSlot(this.mt.globalSlot(g));
-          stack.push(this.emit(`load ${llType(this.m.globals[g]!.type)}, ptr ${cell}`));
+          stack.push(this.emit(`load ${llType(this.m.globals[g]!.type)}, ptr ${cell}, align 8`));
+          break;
+        }
+        case 0xfd: {
+          if (c.u32() !== 12) throw new WasmTranslateError("expected v128.const");
+          const lanes: string[] = [];
+          for (let i = 0; i < 16; i++) lanes.push(`i8 ${c.u8()}`);
+          stack.push(`<${lanes.join(", ")}>`);
           break;
         }
         case 0xd0:
@@ -2856,20 +2898,6 @@ export function translateWasmModule(
   opts: WasmTranslateOptions,
 ): WasmTranslation {
   const m = parseWasmModule(bytes);
-  // The runtime ABI carries scalar slots and 64-bit global cells. Never
-  // truncate a vector or expose one through the JavaScript call boundary.
-  if (
-    m.funcTypes.some(
-      (type, index) =>
-        hasVectorSignature(m.types[type]!) &&
-        (index < m.importedFuncs || m.declaredRefs.has(index)),
-    ) ||
-    m.globals.some((g) => g.type === VAL_V128)
-  ) {
-    throw new WasmTranslateError(
-      "v128 function signatures at import/export/reference boundaries and globals are not supported",
-    );
-  }
   for (const t of m.tables) llType(t.elemType);
   const mt = new ModuleTranslator(m, wasmSymbolPrefix(sha256), opts);
   mt.translate();

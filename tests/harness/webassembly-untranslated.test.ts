@@ -21,9 +21,10 @@ const repoRoot = join(import.meta.dirname, "../..");
 const cacheDir = join(repoRoot, "node_modules/.cache/scriptc-tests");
 const sanitize = process.env["SCRIPTC_SAN"] === "1";
 
-// A valid SIMD module with an exported vector result still cannot use the
-// scalar runtime thunk ABI: (module (func (export "v") (result v128) v128.const i32x4 0 0 0 0)).
-const simdModule = "AGFzbQEAAAABBQFgAAF7AwIBAAcFAQF2AAAKFgEUAP0MAAAAAAAAAAAAAAAAAAAAAAs=";
+// Relaxed SIMD is a separate unsupported instruction family. Standard SIMD128
+// vector signatures and globals now translate.
+const simdModule =
+  "AGFzbQEAAAABBAFgAAADAgEABwUBAXYAAAosASoA/QwAAAAAAAAAAAAAAAAAAAAA/QwAAAAAAAAAAAAAAAAAAAAA/YACGgs=";
 
 const source = `const simd = Buffer.from("${simdModule}", "base64");
 // A type section whose entry is not a function type, so the module is
@@ -82,7 +83,7 @@ describe(`WebAssembly modules without a translation${sanitize ? " (sanitized)" :
       "WebAssembly ahead of time and cannot compile modules whose bytes it did not see; see https://scriptc.dev/limitations)";
     expect(lines[0]).toBe("simd false");
     expect(lines[1]).toBe(
-      `simd true ${found("WebAssembly.Module()", "it uses simd, outside the translated WebAssembly feature set")}`,
+      `simd true ${found("WebAssembly.Module()", "it uses relaxed-simd, outside the translated WebAssembly feature set")}`,
     );
     expect(lines[2]).toBe("invalid false");
     expect(lines[3]).toBe(
@@ -91,7 +92,7 @@ describe(`WebAssembly modules without a translation${sanitize ? " (sanitized)" :
     expect(lines[4]).toBe("unseen false");
     expect(lines[5]).toBe(`unseen true ${unseen}`);
     expect(lines[6]).toBe(
-      `compile true ${found("WebAssembly.compile()", "it uses simd, outside the translated WebAssembly feature set")}`,
+      `compile true ${found("WebAssembly.compile()", "it uses relaxed-simd, outside the translated WebAssembly feature set")}`,
     );
     expect(lines).toHaveLength(7);
   }, 180_000);

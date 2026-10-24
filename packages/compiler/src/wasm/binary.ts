@@ -9,9 +9,8 @@
  * global initializer may read any earlier immutable global), the decoder
  * follows them, because Node is the behavior oracle.
  *
- * SIMD data movement and bitwise instructions are also typed and translated.
- * SIMD arithmetic, vector function signatures and vector globals remain
- * outside the translated subset.
+ * Standard SIMD128 instructions and vector value placements are typed and
+ * translated. Relaxed SIMD is a separate unsupported instruction family.
  *
  * Modules that use a proposal outside that set (threads, exception
  * handling, tail calls, function references and GC, memory64, multiple
@@ -24,7 +23,7 @@
  * The decoder never evaluates anything and keeps no module contents beyond
  * the counts and the feature set it reports. It is plain TypeScript that
  * the native compiler also compiles. */
-import { hasVectorSignature, readMemargFlags } from "./module.js";
+import { readMemargFlags } from "./module.js";
 import { simdIntegerOp, simdFloatOp } from "./simd.js";
 
 /** Proposals the summary can name, in report order. The first group is the
@@ -38,6 +37,7 @@ export const WASM_FEATURES = [
   "reference-types",
   "extended-const",
   "simd",
+  "relaxed-simd",
   "threads",
   "exceptions",
   "tail-call",
@@ -56,9 +56,10 @@ const TRANSLATABLE: ReadonlySet<string> = new Set([
   "multi-value",
   "reference-types",
   "extended-const",
+  "simd",
 ]);
 
-/** True for proposals supported as a whole. SIMD support is module-specific. */
+/** True for proposals supported as a whole. Relaxed SIMD is a separate family. */
 export function isTranslatableFeature(feature: string): boolean {
   return TRANSLATABLE.has(feature);
 }
@@ -410,8 +411,6 @@ class ModuleDecoder {
   sawCode = false;
   /** A type definition outside the function-type subset stopped typing. */
   gcTypes = false;
-  /** A SIMD instruction or value use outside the implemented subset was found. */
-  unsupportedSimd = false;
 
   constructor(bytes: Uint8Array) {
     this.bytes = bytes;
@@ -601,7 +600,6 @@ class ModuleDecoder {
 
   globalType(r: Reader): Global {
     const type = this.valType(r);
-    if (type === V128) this.unsupportedSimd = true;
     if (type === FUNCREF || type === EXTERNREF) this.feature("reference-types");
     const mut = r.u8();
     if (mut > 1) r.malformed("malformed mutability");
@@ -1897,7 +1895,7 @@ class FunctionValidator {
     }
     if (sub > 34 && (sub < 77 || sub > 93)) {
       if (sub < 0x100 || sub > 0x113) r.malformed(`illegal opcode 0xfd ${sub}`);
-      this.m.unsupportedSimd = true;
+      this.m.feature("relaxed-simd");
       this.typed = false;
       r.pos = start;
       this.scanSimd();
@@ -1959,9 +1957,9 @@ class FunctionValidator {
   }
 
   scanSimd(): void {
-    this.m.unsupportedSimd = true;
     const r = this.r;
     const sub = r.u32();
+    if (sub >= 0x100 && sub <= 0x113) this.m.feature("relaxed-simd");
     if (sub <= 11 || sub === 92 || sub === 93) {
       this.scanMemarg();
       return;
@@ -2001,17 +1999,6 @@ export function analyzeWasm(bytes: Uint8Array): WasmModuleSummary {
   let error: string | null = null;
   try {
     m.decode();
-    // Internal native calls carry v128 directly. JavaScript/import/reference
-    // thunks still carry scalar slots, so no vector may reach those paths.
-    for (let f = 0; f < m.funcs.length; f++) {
-      const type = m.types[m.funcs[f]!];
-      if (
-        type !== undefined &&
-        hasVectorSignature(type) &&
-        (f < m.importedFuncs || m.declaredRefs.has(f))
-      )
-        m.unsupportedSimd = true;
-    }
   } catch (e) {
     if (!(e instanceof WasmError)) throw e;
     status = e.kind;
@@ -2022,8 +2009,7 @@ export function analyzeWasm(bytes: Uint8Array): WasmModuleSummary {
   for (const feature of WASM_FEATURES) {
     if (!m.features.has(feature)) continue;
     features.push(feature);
-    if (feature === "simd" ? m.unsupportedSimd : !TRANSLATABLE.has(feature))
-      unsupported.push(feature);
+    if (!TRANSLATABLE.has(feature)) unsupported.push(feature);
   }
   if (status === "valid" && unsupported.length > 0) status = "unsupported";
   return {
