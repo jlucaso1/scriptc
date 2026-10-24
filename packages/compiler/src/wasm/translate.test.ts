@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
-import { analyzeWasm } from "./binary.js";
+import { analyzeWasm, isTranslatableFeature } from "./binary.js";
 import { decodeBase64, encodeBase64 } from "./base64.js";
 import { WasmCursor, parseWasmModule, skipImmediates } from "./module.js";
 import {
@@ -540,6 +540,8 @@ describe("SIMD128 instruction translation", () => {
       [10, 1, instructions.length, ...instructions],
     );
     expect(v8Validate(bytes)).toBe(true);
+    expect(analyzeWasm(bytes).features).toEqual(["simd", "relaxed-simd"]);
+    expect(isTranslatableFeature("relaxed-simd")).toBe(true);
     expect(analyzeWasm(bytes).status).toBe("valid");
     expect(translateWasmModule(bytes, SHA, { boundsChecks: true }).text.join("\n")).toContain(
       "extractelement",
