@@ -1,0 +1,8 @@
+{
+ "order": [
+  "<repo>/tests/wasm-spec/simd-official-runner.mjs",
+  "<repo>/tests/corpus/webassembly-official-simd-store32-lane/data.mjs",
+  "<repo>/tests/corpus/webassembly-official-simd-store32-lane/main.mjs"
+ ],
+ "diags": []
+}

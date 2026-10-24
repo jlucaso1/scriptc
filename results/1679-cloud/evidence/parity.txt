@@ -1,0 +1,14 @@
+
+ RUN  v3.2.7 /workspace/scriptc-simd
+
+ ✓ packages/compiler/test/ts7/order-parity.test.ts (204 tests | 200 skipped) 10960ms
+   ✓ preflight/order canary vs recorded 5.9.3 baselines (4028 entries, full sweep) > tests/corpus/virtual-runtime-optional-returns.ts … +19  2558ms
+   ✓ preflight/order canary vs recorded 5.9.3 baselines (4028 entries, full sweep) > tests/corpus/webassembly-official-simd-f32x4-cmp/main.mjs … +19  3167ms
+   ✓ preflight/order canary vs recorded 5.9.3 baselines (4028 entries, full sweep) > tests/corpus/webassembly-official-simd-i32x4-extadd-pairwise-i16x8/main.mjs … +19  2405ms
+   ✓ preflight/order canary vs recorded 5.9.3 baselines (4028 entries, full sweep) > tests/corpus/webassembly-official-simd-load32-lane/main.mjs … +19  2807ms
+
+ Test Files  1 passed (1)
+      Tests  4 passed | 200 skipped (204)
+   Start at  19:30:06
+   Duration  13.79s (transform 1.57s, setup 0ms, collect 2.27s, tests 10.96s, environment 0ms, prepare 111ms)
+

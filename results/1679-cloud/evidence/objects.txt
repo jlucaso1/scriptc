@@ -1,0 +1,10 @@
+{"target":"x86_64-unknown-linux-gnu","boundsChecks":false,"modules":753,"objectBytes":1183040}
+{"target":"aarch64-unknown-linux-gnu","boundsChecks":false,"modules":753,"objectBytes":1169616}
+{"target":"x86_64-apple-darwin","boundsChecks":false,"modules":753,"objectBytes":1302952}
+{"target":"aarch64-apple-darwin","boundsChecks":false,"modules":753,"objectBytes":1502216}
+{"target":"x86_64-pc-windows-msvc","boundsChecks":false,"modules":753,"objectBytes":927906}
+{"target":"x86_64-unknown-linux-gnu","boundsChecks":true,"modules":753,"objectBytes":1236568}
+{"target":"aarch64-unknown-linux-gnu","boundsChecks":true,"modules":753,"objectBytes":1209840}
+{"target":"x86_64-apple-darwin","boundsChecks":true,"modules":753,"objectBytes":1355808}
+{"target":"aarch64-apple-darwin","boundsChecks":true,"modules":753,"objectBytes":1541712}
+{"target":"x86_64-pc-windows-msvc","boundsChecks":true,"modules":753,"objectBytes":982706}

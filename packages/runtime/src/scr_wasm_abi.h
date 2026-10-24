@@ -10,10 +10,11 @@
  * Every descriptor field is pointer- or 64-bit sized so the emitted LLVM
  * structs and these C structs have the same layout without padding rules.
  * Signatures are strings "params:results" over the letters i (i32),
- * I (i64), f (f32), F (f64), r (funcref) and x (externref). Values travel
+ * I (i64), f (f32), F (f64), r (funcref), x (externref) and v (v128). Values travel
  * in uint64_t slots: f32 and f64 as their bit patterns, references as
  * pointers (externref: a borrowed ScrDyn *, NULL for null; funcref: a
- * ScrWasmFuncRef *, NULL for null).
+ * ScrWasmFuncRef *, NULL for null). A v128 occupies two adjacent slots in
+ * little-endian lane order; each following value starts after both slots.
  *
  * Instance layout (the first argument of every translated function):
  *     0   ScrWasmInst *host            runtime state
@@ -35,7 +36,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#define SCR_WASM_ABI_VERSION 2
+#define SCR_WASM_ABI_VERSION 3
 
 enum { SCR_WASM_FUNC = 0, SCR_WASM_TABLE = 1, SCR_WASM_MEMORY = 2, SCR_WASM_GLOBAL = 3 };
 
@@ -161,8 +162,9 @@ typedef struct ScrWasmModuleDesc {
   uint64_t custom_count;
   const ScrWasmCustomDesc *customs;
   /* Per function: the call thunk of its signature for referenced
-   * functions the module does not export (NULL otherwise), so any
-   * function reference can be called from JavaScript. */
+   * functions without export thunks, and all referenced vector functions
+   * for native cross-instance calls (NULL otherwise). JavaScript calls
+   * with vector signatures throw before entering a thunk. */
   const ScrWasmCallThunk *func_call_thunks;
 } ScrWasmModuleDesc;
 
@@ -228,7 +230,8 @@ typedef struct ScrWasmTable {
 
 /* A global's cell: the value in the low bytes of `value`. */
 typedef struct ScrWasmGlobal {
-  uint64_t value; /* 0 */
+  uint64_t value; /* 0: scalar value or low vector half */
+  uint64_t value_high; /* 8: high vector half */
   size_t rc;
   char type;
   bool mutable_;

@@ -1,0 +1,131 @@
+
+> @scriptc/docs@0.0.0 check /workspace/scriptc-simd/docs
+> pnpm compat:check && pnpm typecheck && pnpm build && pnpm test:routes
+
+
+> @scriptc/docs@0.0.0 compat:check /workspace/scriptc-simd/docs
+> pnpm --dir .. node-compat:check
+
+
+> scriptc-monorepo@ node-compat:check /workspace/scriptc-simd
+> pnpm --filter @internal/compatibility run check
+
+packages/cli-darwin-arm64                |  WARN  Unsupported platform: wanted: {"cpu":["arm64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-darwin-x64                  |  WARN  Unsupported platform: wanted: {"cpu":["x64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-linux-arm64-gnu             |  WARN  Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["glibc"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-linux-arm64-musl            |  WARN  Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["musl"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-linux-x64-musl              |  WARN  Unsupported platform: wanted: {"cpu":["x64"],"os":["linux"],"libc":["musl"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/cli-win32-x64-msvc              |  WARN  Unsupported platform: wanted: {"cpu":["x64"],"os":["win32"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-darwin-arm64               |  WARN  Unsupported platform: wanted: {"cpu":["arm64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-darwin-x64                 |  WARN  Unsupported platform: wanted: {"cpu":["x64"],"os":["darwin"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-linux-arm64-gnu            |  WARN  Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-linux-arm64-musl           |  WARN  Unsupported platform: wanted: {"cpu":["arm64"],"os":["linux"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+packages/llvm-win32-x64-msvc             |  WARN  Unsupported platform: wanted: {"cpu":["x64"],"os":["win32"],"libc":["any"]} (current: {"os":"linux","cpu":"x64","libc":"glibc"})
+
+> @internal/compatibility@0.0.0 check /workspace/scriptc-simd/internal/compatibility
+> node src/generate.mjs --check-local
+
+Node compatibility snapshot is locally current (4996 source rows, 3880 public matrix rows, Node 24.22.0)
+
+> @scriptc/docs@0.0.0 typecheck /workspace/scriptc-simd/docs
+> fumadocs-mdx && next typegen && tsc --noEmit
+
+[MDX] generated files in 18.63096399999995ms
+Generating route types...
+[MDX] generated files in 19.80142899999987ms
+✓ Types generated successfully
+
+> @scriptc/docs@0.0.0 build /workspace/scriptc-simd/docs
+> fumadocs-mdx && next build
+
+[MDX] generated files in 21.36853400000001ms
+▲ Next.js 16.3.8 (Turbopack)
+✓ Running next.config.mjs took 70ms
+[MDX] generated files in 16.683783999999832ms
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 49s
+  Running TypeScript ...
+  Finished TypeScript in 9.5s ...
+  Collecting page data using 4 workers ...
+  Generating static pages using 4 workers (0/31) ...
+  Generating static pages using 4 workers (7/31) 
+  Generating static pages using 4 workers (15/31) 
+  Generating static pages using 4 workers (23/31) 
+✓ Generating static pages using 4 workers (31/31) in 5.7s
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ƒ /.well-known/mcp.json
+├   /[lang]/docs/[[...slug]]
+│ ├ ● /en/docs/cli
+│ ├ ● /en/docs/contracts
+│ ├ ● /en/docs/coverage
+│ └ ● [+11 more paths]
+├ ○ /agents.md
+├ ƒ /api/docs-md/[[...slug]]
+├ ƒ /api/mcp
+├ ƒ /api/search
+├ ○ /compatibility
+├ ○ /compatibility/data
+├ ○ /llms.txt
+├ ○ /node-compatibility
+├ ƒ /node-compatibility/data
+├ ƒ /og
+├ ƒ /og/[...slug]
+├ ○ /robots.txt
+├ ○ /sitemap.md
+└ ○ /sitemap.xml
+
+
+ƒ Proxy (Middleware)
+
+○  (Static)   prerendered as static content
+●  (SSG)      prerendered as static HTML (uses generateStaticParams)
+ƒ  (Dynamic)  server-rendered on demand
+
+
+> @scriptc/docs@0.0.0 test:routes /workspace/scriptc-simd/docs
+> node scripts/test-routes.mjs
+
+▲ Next.js 16.3.8
+- Local:         http://127.0.0.1:44105
+- Network:       http://127.0.0.1:44105
+✓ Ready in 167ms
+✓ Running next.config.mjs took 90ms
+[MDX] generated files in 11.48798099999999ms
+✔ /docs preserves its title, social card and published heading anchors (120.676913ms)
+✔ /docs/quickstart preserves its title, social card and published heading anchors (96.772277ms)
+✔ /docs/coverage preserves its title, social card and published heading anchors (23.414681ms)
+✔ /docs/dependencies preserves its title, social card and published heading anchors (23.593147ms)
+✔ /docs/ffi preserves its title, social card and published heading anchors (38.458698ms)
+✔ /docs/native-objects preserves its title, social card and published heading anchors (17.54814ms)
+✔ /docs/threads preserves its title, social card and published heading anchors (23.50446ms)
+✔ /docs/contracts preserves its title, social card and published heading anchors (34.947773ms)
+✔ /docs/experimental preserves its title, social card and published heading anchors (33.049493ms)
+✔ /docs/wasm preserves its title, social card and published heading anchors (23.962811ms)
+✔ /docs/platforms preserves its title, social card and published heading anchors (16.635264ms)
+✔ /docs/cli preserves its title, social card and published heading anchors (26.126349ms)
+✔ /docs/how-it-works preserves its title, social card and published heading anchors (23.853843ms)
+✔ /docs/limitations preserves its title, social card and published heading anchors (41.543853ms)
+✔ previous docs URLs redirect permanently and preserve query parameters (18.981403ms)
+✔ Markdown twins preserve examples and declare the HTML canonical URL (1893.50708ms)
+✔ literal HTML tables and definition lists remain readable (603.311276ms)
+✔ docs negotiate Markdown and keep browser HTML and prefetch payloads (86.69045ms)
+✔ unknown pages return 404 in HTML and Markdown (307.245697ms)
+✔ agent and search indexes include every documentation page (187.938191ms)
+✔ internal documentation links and their fragments resolve (223.069985ms)
+✔ compatibility page and data endpoints keep their existing contracts (98.658012ms)
+✔ WebMCP serves its bridge and discovery manifest (80.048473ms)
+✔ homepage negotiates the agent profile and preserves explicit HTML requests (28.063833ms)
+✔ homepage and existing social images still render (248.949139ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4459.986049

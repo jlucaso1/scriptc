@@ -1,0 +1,127 @@
+
+ RUN  v3.2.7 /workspace/scriptc-simd
+
+ ✓ tests/harness/llvm-differential.test.ts (3604 tests | 3546 skipped) 308158ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-address/main.mjs  4138ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-align/main.mjs  3290ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-bit-shift/main.mjs  4033ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-bitwise/main.mjs  3471ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-boolean/main.mjs  4077ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-const/main.mjs  4220ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-conversions/main.mjs  3717ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f32x4-arith/main.mjs  11701ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f32x4-cmp/main.mjs  16921ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f32x4-pmin-pmax/main.mjs  26950ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f32x4-rounding/main.mjs  4252ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f32x4/main.mjs  7093ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f64x2-arith/main.mjs  12107ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f64x2-cmp/main.mjs  17413ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f64x2-pmin-pmax/main.mjs  25523ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f64x2-rounding/main.mjs  3239ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-f64x2/main.mjs  6333ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-arith/main.mjs  3619ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-arith2/main.mjs  3404ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-cmp/main.mjs  4444ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-extadd-pairwise-i8x16/main.mjs  3278ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-extmul-i8x16/main.mjs  3548ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-q15mulr-sat-s/main.mjs  3361ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i16x8-sat-arith/main.mjs  4077ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-arith/main.mjs  4698ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-arith2/main.mjs  3538ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-cmp/main.mjs  5014ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-dot-i16x8/main.mjs  3427ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-extadd-pairwise-i16x8/main.mjs  3723ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-extmul-i16x8/main.mjs  5779ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-trunc-sat-f32x4/main.mjs  3151ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i32x4-trunc-sat-f64x2/main.mjs  3139ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i64x2-arith/main.mjs  3455ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i64x2-arith2/main.mjs  2647ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i64x2-cmp/main.mjs  3561ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i64x2-extmul-i32x4/main.mjs  3192ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i8x16-arith/main.mjs  3219ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i8x16-arith2/main.mjs  3759ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i8x16-cmp/main.mjs  4763ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-i8x16-sat-arith/main.mjs  3379ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-int-to-int-extend/main.mjs  3676ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-lane/main.mjs  3872ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-linking/main.mjs  2477ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load-extend/main.mjs  2859ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load-splat/main.mjs  3049ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load-zero/main.mjs  3385ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load/main.mjs  2725ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load16-lane/main.mjs  3157ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load32-lane/main.mjs  2934ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load64-lane/main.mjs  3391ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-load8-lane/main.mjs  3605ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-select/main.mjs  5548ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-splat/main.mjs  5313ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-store/main.mjs  3236ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-store16-lane/main.mjs  3707ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-store32-lane/main.mjs  3059ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-store64-lane/main.mjs  3641ms
+   ✓ llvm differential corpus (3604 programs, release+dev) > webassembly-official-simd-store8-lane/main.mjs  3813ms
+ ✓ tests/harness/differential.test.ts (3604 tests | 3546 skipped) 104777ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-address/main.mjs  2969ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-align/main.mjs  1547ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-bit-shift/main.mjs  1783ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-bitwise/main.mjs  1814ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-boolean/main.mjs  1777ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-const/main.mjs  2004ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-conversions/main.mjs  1519ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f32x4-arith/main.mjs  3115ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f32x4-cmp/main.mjs  7022ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f32x4-pmin-pmax/main.mjs  4882ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f32x4-rounding/main.mjs  1327ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f32x4/main.mjs  1889ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f64x2-arith/main.mjs  2578ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f64x2-cmp/main.mjs  2908ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f64x2-pmin-pmax/main.mjs  3785ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f64x2-rounding/main.mjs  1347ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-f64x2/main.mjs  1659ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-arith/main.mjs  1219ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-arith2/main.mjs  1273ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-cmp/main.mjs  1651ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-extadd-pairwise-i8x16/main.mjs  1022ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-extmul-i8x16/main.mjs  1241ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-q15mulr-sat-s/main.mjs  1336ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i16x8-sat-arith/main.mjs  1232ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-arith/main.mjs  1112ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-arith2/main.mjs  1149ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-cmp/main.mjs  1833ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-dot-i16x8/main.mjs  1332ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-extadd-pairwise-i16x8/main.mjs  1311ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-extmul-i16x8/main.mjs  1183ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-trunc-sat-f32x4/main.mjs  1079ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i32x4-trunc-sat-f64x2/main.mjs  1197ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i64x2-arith/main.mjs  1254ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i64x2-arith2/main.mjs  1234ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i64x2-cmp/main.mjs  1140ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i64x2-extmul-i32x4/main.mjs  1330ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i8x16-arith/main.mjs  1405ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i8x16-arith2/main.mjs  1840ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i8x16-cmp/main.mjs  3513ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-i8x16-sat-arith/main.mjs  1468ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-int-to-int-extend/main.mjs  3507ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-lane/main.mjs  1602ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-linking/main.mjs  1481ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load-extend/main.mjs  1621ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load-splat/main.mjs  1543ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load-zero/main.mjs  1546ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load/main.mjs  1443ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load16-lane/main.mjs  1375ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load32-lane/main.mjs  1643ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load64-lane/main.mjs  1395ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-load8-lane/main.mjs  1699ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-select/main.mjs  1253ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-splat/main.mjs  1299ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-store/main.mjs  1455ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-store16-lane/main.mjs  1533ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-store32-lane/main.mjs  1230ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-store64-lane/main.mjs  1377ms
+   ✓ differential corpus (3604 programs) > webassembly-official-simd-store8-lane/main.mjs  1391ms
+
+ Test Files  2 passed (2)
+      Tests  116 passed | 7092 skipped (7208)
+   Start at  00:55:14
+   Duration  429.69s (transform 8.53s, setup 0ms, collect 15.51s, tests 412.94s, environment 0ms, prepare 168ms)
+
