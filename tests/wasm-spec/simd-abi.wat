@@ -4,6 +4,7 @@
  (global (export "constant") v128 (v128.const i32x4 5 6 7 8))
  (func (export "vector") (param i32 v128 i64 v128) (result v128 i32 v128 i64)
   local.get 1 local.get 0 local.get 3 local.get 2)
+ (func (export "result") (result v128) i32.const 42 i32x4.splat global.set $g global.get $g)
  (func (export "high") (result i64) global.get $g i64x2.extract_lane 1)
  (func (export "get") (result i32) global.get $g i32x4.extract_lane 3)
  (func (export "set") i32.const 99 i32x4.splat global.set $g)

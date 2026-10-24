@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 const tools = process.argv[2];
 if (!tools) throw new Error("expected WABT bin directory");
+if (execFileSync(join(tools, "wat2wasm"), ["--version"], { encoding: "utf8" }).trim() !== "1.0.36 (git~1.0.37)")
+  throw new Error("expected WABT 1.0.37 release banner");
 const temp = mkdtempSync(join(tmpdir(), "simd-abi-"));
 try {
   const cases = {};
