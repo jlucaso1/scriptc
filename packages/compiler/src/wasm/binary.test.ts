@@ -41,7 +41,6 @@ function module(...sections: number[][]): Uint8Array {
 const I32 = 0x7f;
 const I64 = 0x7e;
 const F32 = 0x7d;
-const V128 = 0x7b;
 const EXTERNREF = 0x6f;
 
 const funcType = (params: number[], results: number[]): number[] => [
