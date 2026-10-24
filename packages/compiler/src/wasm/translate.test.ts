@@ -610,3 +610,51 @@ describe("SIMD native contract", () => {
     });
   }
 });
+
+describe("recovered adversarial vector ABI cases", () => {
+  const abi = JSON.parse(
+    readFileSync(
+      new URL("../../../../tests/wasm-spec/corpus/simd-abi.json", import.meta.url),
+      "utf8",
+    ),
+  ) as Record<string, string>;
+  test.each(Object.entries(abi))(
+    "validates and lowers %s with the vector runtime ABI",
+    (_name, base64) => {
+      const bytes = Buffer.from(base64, "base64");
+      expect(v8Validate(bytes)).toBe(true);
+      expect(analyzeWasm(bytes).status).toBe("valid");
+      for (const boundsChecks of [false, true]) {
+        const out = translateWasmModule(bytes, SHA, { boundsChecks });
+        const text = out.text.join("\n");
+        expect(text.slice(text.indexOf(out.descriptor + " ="))).toContain(
+          `i64 ${bytes.length}, i64 3,`,
+        );
+      }
+    },
+  );
+  test("keeps scalar descriptor ABI compatibility", () => {
+    const out = translateWasmModule(ADD, SHA, { boundsChecks: false });
+    const text = out.text.join("\n");
+    expect(text.slice(text.indexOf(out.descriptor + " ="))).toContain(`i64 ${ADD.length}, i64 2,`);
+  });
+  test("boundary mutations agree with V8 validation", () => {
+    const originals = Object.values(abi).map((base64) => Buffer.from(base64, "base64"));
+    let seed = 0x1679ab1;
+    const random = (limit: number): number => {
+      seed ^= seed << 13;
+      seed ^= seed >>> 17;
+      seed ^= seed << 5;
+      return (seed >>> 0) % limit;
+    };
+    for (let i = 0; i < 2000; i++) {
+      const bytes = Uint8Array.from(originals[random(originals.length)]!);
+      bytes[random(bytes.length)] = random(256);
+      const summary = analyzeWasm(bytes),
+        valid = v8Validate(bytes);
+      if (summary.status === "valid") expect(valid, `boundary mutation ${i}`).toBe(true);
+      if (summary.status === "invalid" || summary.status === "malformed")
+        expect(valid, `boundary mutation ${i}`).toBe(false);
+    }
+  });
+});

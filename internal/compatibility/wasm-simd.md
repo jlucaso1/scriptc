@@ -8,6 +8,10 @@ Vectors use LLVM `<16 x i8>` values, with bitcasts for other lane shapes. Global
 
 The [WebAssembly JavaScript interface](https://webassembly.github.io/spec/js-api/#exported-function-call) cannot convert `v128` values. An exported vector function is a valid callable object and can be linked to another Wasm module, but calling it from JavaScript throws `TypeError` before argument coercion or execution. An ordinary JavaScript function may satisfy a vector import at instantiation; attempting that call throws before invoking the function. Vector globals may be exported and imported as opaque `WebAssembly.Global` objects. Their JavaScript getter, setter and `valueOf` throw; constructing one from JavaScript also throws. These are normative boundaries, not unsupported SIMD modules.
 
+Vector globals and vector function signatures use descriptor ABI 3, which an older runtime refuses before allocating an instance. Modules with scalar globals and signatures retain descriptor ABI 2; the new runtime accepts both versions. This keeps scalar translation stable while requiring rebuilt runtime packs for vector boundaries.
+
+The adversarial `webassembly-simd-abi` fixtures were recovered from fork checkpoint `5538607fbdad667f3577d9e0a49020e9c5f9d6d1` and revalidated against this implementation. They cover high global bits, two vector arguments/results interleaved with scalars, imported tables, re-export chains, wrong signatures and JavaScript call non-execution. The checkpoint's reported test outcomes are not used as validation here.
+
 ## Validation and lowering
 
 The decoder checks operand and control-stack types for SIMD, including unreachable code, lanes, shuffle indices and memory alignment. Vector constants and immediates are also handled in global initialization, call-graph scans and dead-code scans. Separate function signature hashes distinguish scalar and vector signatures.
