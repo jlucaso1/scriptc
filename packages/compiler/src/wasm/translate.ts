@@ -110,8 +110,6 @@ const FUNC_ATTRS = `nounwind "disable-tail-calls"="true"`;
 
 const RUNTIME_DECLS = [
   "declare void @scr_wasm_trap(i32) noreturn nounwind cold",
-  "declare ptr @scr_wasm_import_vector_ref(ptr, i32)",
-  "declare void @scr_wasm_vector_js_error()",
   "declare void @scr_wasm_import_call(ptr, i32, ptr, ptr)",
   "declare i32 @scr_wasm_memory_grow(ptr, i32)",
   "declare void @scr_wasm_memory_fill(ptr, i32, i32, i32)",
@@ -2959,6 +2957,10 @@ export function translateWasmModule(
   mt.translate();
   const descriptor = mt.descriptor(sha256);
   const decls = [...RUNTIME_DECLS, ...mt.intrinsicDecls];
+  if (m.funcTypes.some((type) => hasVectorSignature(m.types[type]!))) {
+    decls.push("declare ptr @scr_wasm_import_vector_ref(ptr, i32)");
+    decls.push("declare void @scr_wasm_vector_js_error()");
+  }
   // Initial-exec: executables and their static runtime define it, so the
   // check is one thread-pointer-relative load, not a TLS lookup call.
   if (opts.boundsChecks)
