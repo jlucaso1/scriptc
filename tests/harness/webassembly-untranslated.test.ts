@@ -21,8 +21,9 @@ const repoRoot = join(import.meta.dirname, "../..");
 const cacheDir = join(repoRoot, "node_modules/.cache/scriptc-tests");
 const sanitize = process.env["SCRIPTC_SAN"] === "1";
 
-// (module (func i32.const 0 i8x16.splat drop))
-const simdModule = "AGFzbQEAAAABBAFgAAADAgEACgkBBwBBAP0PGgs=";
+// A valid SIMD module with an exported vector result still cannot use the
+// scalar runtime thunk ABI: (module (func (export "v") (result v128) v128.const i32x4 0 0 0 0)).
+const simdModule = "AGFzbQEAAAABBQFgAAF7AwIBAAcFAQF2AAAKFgEUAP0MAAAAAAAAAAAAAAAAAAAAAAs=";
 
 const source = `const simd = Buffer.from("${simdModule}", "base64");
 // A type section whose entry is not a function type, so the module is

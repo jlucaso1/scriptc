@@ -146,6 +146,7 @@ describe("analyzeWasm", () => {
       module(
         types(funcType([], [V128])),
         funcs(0),
+        exportsOf([...name("vector"), 0, 0]),
         code(body([0xfd, 0x0c, ...Array.from({ length: 16 }, () => 0)])),
       ),
     ],
