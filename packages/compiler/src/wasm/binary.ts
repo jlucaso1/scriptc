@@ -9,9 +9,9 @@
  * global initializer may read any earlier immutable global), the decoder
  * follows them, because Node is the behavior oracle.
  *
- * SIMD data movement and bitwise instructions are also typed and translated.
- * SIMD arithmetic, vector function signatures and vector globals remain
- * outside the translated subset.
+ * Standard and relaxed SIMD instructions, vector globals and vector function
+ * signatures are typed and translated. Vectors stay within native Wasm
+ * calls; the JavaScript API enforces its normative conversion restrictions.
  *
  * Modules that use a proposal outside that set (threads, exception
  * handling, tail calls, function references and GC, memory64, multiple

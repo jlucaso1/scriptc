@@ -10,10 +10,11 @@
  * Every descriptor field is pointer- or 64-bit sized so the emitted LLVM
  * structs and these C structs have the same layout without padding rules.
  * Signatures are strings "params:results" over the letters i (i32),
- * I (i64), f (f32), F (f64), r (funcref) and x (externref). Values travel
+ * I (i64), f (f32), F (f64), v (v128), r (funcref) and x (externref). Scalar values travel
  * in uint64_t slots: f32 and f64 as their bit patterns, references as
  * pointers (externref: a borrowed ScrDyn *, NULL for null; funcref: a
- * ScrWasmFuncRef *, NULL for null).
+ * ScrWasmFuncRef *, NULL for null). Vector signatures use native code and
+ * instance pointers directly; JavaScript conversion thunks reject them.
  *
  * Instance layout (the first argument of every translated function):
  *     0   ScrWasmInst *host            runtime state
@@ -21,7 +22,7 @@
  *     16  ScrWasmMemory *memory        memory 0, or NULL
  *     24  ScrWasmFuncRef *funcrefs     one record per function
  *     32  ScrWasmTable *tables[table_count]
- *     ..  uint64_t *globals[global_count]   one cell per global
+ *     ..  ScrWasmGlobal *globals[global_count]   one cell per global
  * With guard pages (no SCR_WASM_DESC_BOUNDS_CHECKS) memory_base never
  * changes: the memory is reserved once at its largest size plus a guard
  * region, and grow only commits pages. With explicit bounds checks the

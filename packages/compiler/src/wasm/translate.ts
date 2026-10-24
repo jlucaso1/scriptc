@@ -14,7 +14,7 @@
  *     literal struct. An imported function is a stub that packs its
  *     arguments and calls scr_wasm_import_call.
  *   - one thunk per exported function, `void (ptr inst, ptr args, ptr
- *     results)` over 64-bit slots, which the runtime calls under its trap
+ *     results)` over 64-bit scalar slots, which the runtime calls under its trap
  *     guard;
  *   - an init function (globals, table initializers, active element and
  *     data segments); the descriptor names the start function;
@@ -352,7 +352,10 @@ class ModuleTranslator {
     if (hasVectorSignature(ft)) {
       // Vectors never cross JavaScript. Resolve a native Wasm import's
       // original reference, preserving its instance through chained imports.
-      const out = [`define internal ${this.signature(ft, this.fn(index))} nounwind {`, "entry:"];
+      const out = [
+        `define internal ${this.signature(ft, this.fn(index))} nounwind "disable-tail-calls"="true" {`,
+        "entry:",
+      ];
       out.push("  %host = load ptr, ptr %inst");
       out.push(`  %ref = call ptr @scr_wasm_import_vector_ref(ptr %host, i32 ${index})`);
       out.push("  %code = load ptr, ptr %ref, align 8");
@@ -489,7 +492,9 @@ class ModuleTranslator {
         // value; the runtime's setter retains it.
         body.add(`  call void @scr_wasm_global_set_ref(ptr ${cell}, ptr ${v})`);
       } else {
-        body.add(`  store ${llType(global.type)} ${v}, ptr ${cell}, align 8`);
+        body.add(
+          `  store ${llType(global.type)} ${v}, ptr ${cell}${global.type === VAL_V128 ? ", align 8" : ""}`,
+        );
       }
     }
     // Defined tables with an initializer.
@@ -1101,7 +1106,11 @@ class FunctionTranslator {
         case 0x23: {
           const g = c.u32();
           const cell = this.loadPtrSlot(this.mt.globalSlot(g));
-          stack.push(this.emit(`load ${llType(this.m.globals[g]!.type)}, ptr ${cell}, align 8`));
+          stack.push(
+            this.emit(
+              `load ${llType(this.m.globals[g]!.type)}, ptr ${cell}${this.m.globals[g]!.type === VAL_V128 ? ", align 8" : ""}`,
+            ),
+          );
           break;
         }
         case 0xfd: {

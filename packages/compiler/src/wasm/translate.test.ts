@@ -316,10 +316,16 @@ describe("SIMD128 instruction translation", () => {
         "utf8",
       ),
     );
-    expect(inventory).toHaveLength(236);
-    expect(new Set(inventory.map((entry) => entry.opcode)).size).toBe(236);
+    expect(inventory).toHaveLength(256);
+    expect(new Set(inventory.map((entry) => entry.opcode)).size).toBe(256);
     const exercised = new Set<number>();
-    for (const fixture of simdFixtures) {
+    const relaxed: { base64: string }[] = JSON.parse(
+      readFileSync(
+        new URL("../../../../tests/wasm-spec/corpus/simd-contract.json", import.meta.url),
+        "utf8",
+      ),
+    ).relaxed;
+    for (const fixture of [...simdFixtures, ...relaxed]) {
       const m = parseWasmModule(Buffer.from(fixture.base64, "base64"));
       for (const code of m.codes) {
         const c = new WasmCursor(m.bytes, code.body.start);
@@ -337,7 +343,7 @@ describe("SIMD128 instruction translation", () => {
     expect(
       inventory.filter((entry) => entry.translated).map((entry) => Number(entry.opcode)),
     ).toEqual([...exercised].sort((a, b) => a - b));
-    expect(exercised.size).toBe(236);
+    expect(exercised.size).toBe(256);
   });
 
   test.each([0x23, 0xd6, 0x63, 0x64, 0xc3, 0xc4])(

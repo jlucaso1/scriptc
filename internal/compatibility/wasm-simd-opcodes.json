@@ -1178,5 +1178,105 @@
     "opcode": "0xff",
     "instruction": "f64x2.convert_low_i32x4_u",
     "translated": true
+  },
+  {
+    "opcode": "0x100",
+    "instruction": "i8x16.relaxed_swizzle",
+    "translated": true
+  },
+  {
+    "opcode": "0x101",
+    "instruction": "i32x4.relaxed_trunc_f32x4_s",
+    "translated": true
+  },
+  {
+    "opcode": "0x102",
+    "instruction": "i32x4.relaxed_trunc_f32x4_u",
+    "translated": true
+  },
+  {
+    "opcode": "0x103",
+    "instruction": "i32x4.relaxed_trunc_f64x2_s_zero",
+    "translated": true
+  },
+  {
+    "opcode": "0x104",
+    "instruction": "i32x4.relaxed_trunc_f64x2_u_zero",
+    "translated": true
+  },
+  {
+    "opcode": "0x105",
+    "instruction": "f32x4.relaxed_madd",
+    "translated": true
+  },
+  {
+    "opcode": "0x106",
+    "instruction": "f32x4.relaxed_nmadd",
+    "translated": true
+  },
+  {
+    "opcode": "0x107",
+    "instruction": "f64x2.relaxed_madd",
+    "translated": true
+  },
+  {
+    "opcode": "0x108",
+    "instruction": "f64x2.relaxed_nmadd",
+    "translated": true
+  },
+  {
+    "opcode": "0x109",
+    "instruction": "i8x16.relaxed_laneselect",
+    "translated": true
+  },
+  {
+    "opcode": "0x10a",
+    "instruction": "i16x8.relaxed_laneselect",
+    "translated": true
+  },
+  {
+    "opcode": "0x10b",
+    "instruction": "i32x4.relaxed_laneselect",
+    "translated": true
+  },
+  {
+    "opcode": "0x10c",
+    "instruction": "i64x2.relaxed_laneselect",
+    "translated": true
+  },
+  {
+    "opcode": "0x10d",
+    "instruction": "f32x4.relaxed_min",
+    "translated": true
+  },
+  {
+    "opcode": "0x10e",
+    "instruction": "f32x4.relaxed_max",
+    "translated": true
+  },
+  {
+    "opcode": "0x10f",
+    "instruction": "f64x2.relaxed_min",
+    "translated": true
+  },
+  {
+    "opcode": "0x110",
+    "instruction": "f64x2.relaxed_max",
+    "translated": true
+  },
+  {
+    "opcode": "0x111",
+    "instruction": "i16x8.relaxed_q15mulr_s",
+    "translated": true
+  },
+  {
+    "opcode": "0x112",
+    "instruction": "i16x8.relaxed_dot_i8x16_i7x16_s",
+    "translated": true
+  },
+  {
+    "opcode": "0x113",
+    "instruction": "i32x4.relaxed_dot_i8x16_i7x16_add_s",
+    "translated": true
   }
 ]
